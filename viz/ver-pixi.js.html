@@ -343,8 +343,8 @@ function show_vm_detail(vmid) {
     // when near the bottom or right edge, reset the value
     var x = parseInt(vm.x + vm.width + 3);
     var y = parseInt(vm.y);
-    if (x + 110 > window.innerWidth) { x = vm.x - 140; }
-    if (y + 160 > window.innerHeight) { y = vm.y - 160; }
+    if (x + 180 > window.innerWidth) { x = vm.x - 180; }
+    if (y + 180 > window.innerHeight) { y = vm.y - 180; }
     $('#vmdpanel')
         .css('left', x + 'px')
         .css('top', y + 'px')
