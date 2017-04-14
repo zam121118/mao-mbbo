@@ -22,10 +22,16 @@ html,body { margin:0; padding:0; width:100%; height:100%; overflow-y:hidden; }
 #dashboard a { text-decoration:none; }
 #dashboard .db-panel { margin:5px 0 0 5px; width:180px; height:170px; float:left; display:block; background:rgba(0,0,0,0.5); padding:5px; }
 
-#vmdpanel { position:absolute; top:0; left:0; padding:5px; width:160px; height:160px; background:rgba(0,0,0,0.75); border:3px solid #000000; -moz-border-radius:10px; -webkit-border-radius: 10px; border-radius:10px; }
+#vmdpanel { position:absolute; top:0; left:0; padding:5px; width:160px; height:160px; background:rgba(0,0,0,0.75); border:2px solid #000000; -moz-border-radius:10px; -webkit-border-radius: 10px; border-radius:10px; }
 #vmdpanel h3, #vmdpanel p { color:white; padding:0; margin:0; }
 #vmdpanel h3 { font-size:.9em; }
-#vmdpanel p { font-size:.8em; text-indent:.2em; }
+#vmdpanel p { font-size:.7em; text-indent:.2em; }
+
+#pmdpanel { position:absolute; top:0; left:0; padding:5px; width:160px; height:160px; background:rgba(0,0,128,0.75); border:2px solid #000080; -moz-border-radius:6px; -webkit-border-radius: 6px; border-radius:6px; }
+#pmdpanel h3, #pmdpanel p { color:white; padding:0; margin:0; }
+#pmdpanel h3 { font-size:.9em; }
+#pmdpanel p { font-size:.7em; text-indent:.2em; }
+
 .pm { position:relative; float:left; margin:3px; border:1px dotted #CACACA; width:150px; height:170px; }
 .box { position:relative; top:0; left:0; height:150px; border-bottom:1px dotted #CACACA; background:#FFFFFF; }
 .badge { position:relative; bottom:0; left:0; height:20px; font-size:.5em; text-indent:.5em; background:#EAEAEA; }
@@ -49,13 +55,13 @@ html,body { margin:0; padding:0; width:100%; height:100%; overflow-y:hidden; }
         <p><i class="fa fa-flash"></i> Power: <b>13433</b></p>
         <p><i class="fa fa-cube"></i> # of PM: <b>200</b></p>
         <p><i class="fa fa-cubes"></i> # of VM: <b>200</b></p>
-        <p><i class="fa fa-plane"></i> # of VM mirgated: <b>32</b></p>
+        <p><i class="fa fa-plane"></i> # of Mig.: <b>32</b></p>
     </div><!-- .db-panel -->
 
     <div class="db-panel">
       <h3>Performance</h3>
-      <p><i class="fa fa-clock-o"></i> Sim. Time: <b>00:21:34</b></p>
-      <p><i class="fa fa-clock-o"></i> Est. Move Time: <b>00:00:17</b></p>
+      <p><i class="fa fa-clock-o"></i> Sim. ETime: <b>00:21:34</b></p>
+      <p><i class="fa fa-clock-o"></i> Est. MTime: <b>00:00:17</b></p>
     </div><!-- .db-panel -->
 
     <div class="db-panel">
@@ -75,8 +81,8 @@ html,body { margin:0; padding:0; width:100%; height:100%; overflow-y:hidden; }
 
     <div class="db-panel">
       <h3>Migration Stat.</h3>
-      <p><i class="fa fa-adjust"></i> # of shutdown: <b>24</b></p>
-      <p><i class="fa fa-truck"></i> # of mv: <b>27</b></p>
+      <p><i class="fa fa-adjust"></i> # of ST: <b>24</b></p>
+      <p><i class="fa fa-truck"></i> # of MV: <b>27</b></p>
     </div>
   </div><!-- #db-content -->
 
@@ -92,6 +98,12 @@ html,body { margin:0; padding:0; width:100%; height:100%; overflow-y:hidden; }
 <div id="vmdpanel" style="display:none;">
   <h3><i class="fa fa-tv"></i> VM Detail</h3>
   <div id="vmdp-content">
+  </div>
+</div>
+
+<div id="pmdpanel" style="display:none;">
+  <h3><i class="fa fa-tv"></i> PM Detail</h3>
+  <div id="pmdp-content">
   </div>
 </div>
 
@@ -115,8 +127,9 @@ var clr_vm_avail = 0x00FF00;
 var clr_pmbox = 0xFF0000;
 var clr_vmbox = 0xA66F00;
 
-// is vm detail panel shown
-var is_dp_shown = false;
+// is vm/pm detail panel shown
+var is_vmdp_shown = false;
+var is_pmdp_shown = false;
 
 // PIXI.js objects
 var renderer, stage;
@@ -275,6 +288,8 @@ function on_over_pm() {
     }
     pmbox.x = this.x;
     pmbox.y = this.y;
+
+    show_pm_detail(this.id);
 }
 
 /**
@@ -283,6 +298,7 @@ function on_over_pm() {
 function on_out_pm() {
     this.is_over = false;
     //console.log("out " + this.id);
+    close_pm_detail(this.id);
 }
 
 /**
@@ -321,10 +337,48 @@ function on_out_vm() {
 }
 
 /**
+ * Display the PM detail information panel
+ */
+function show_pm_detail(pmid) {
+    if (is_pmdp_shown) {
+        return;
+    }
+    var pm = pms[pmid];
+    var pm_num = parseInt(pmid.split('-')[1]);
+    var pm_data = dataobj.pms[pm_num];
+    var pm_state = dataobj.state[pm_num];
+    $('#pmdp-content').html(
+        "<p>#: <b>"+pmid+"</b></p>" +
+        "<p>U.CPU: <b>"+pm_data[0].toFixed(4)+"</b></p>" +
+        "<p>U.MEM: <b>"+pm_data[1].toFixed(4)+"</b></p>" +
+        "<p>VMS: " + pm_state
+    );
+    // calc the position of this panel
+    // when near the bottom or right edge, reset the value
+    var x = parseInt(pm.x + pm.width + 5);
+    var y = parseInt(pm.y);
+    if (x + 180 > window.innerWidth) { x = pm.x - 180; }
+    if (y + 180 > window.innerHeight) { y = pm.y - 180; }
+    $('#pmdpanel')
+        .css('left', x + 'px')
+        .css('top', y + 'px')
+        .fadeToggle(100);
+    is_pmdp_shown = true;
+}
+
+/**
+ * Remove the PM detail information panel
+ */
+function close_pm_detail(pmid) {
+    is_pmdp_shown = false;
+    $('#pmdpanel').fadeToggle(100);
+}
+
+/**
  * Display the VM detail information panel
  */
 function show_vm_detail(vmid) {
-    if (is_dp_shown) {
+    if (is_vmdp_shown) {
         return;
     }
     var vm = vms[vmid];
@@ -349,14 +403,14 @@ function show_vm_detail(vmid) {
         .css('left', x + 'px')
         .css('top', y + 'px')
         .fadeToggle(100);
-    is_dp_shown = true;
+    is_vmdp_shown = true;
 }
 
 /**
  * Remove the VM detail information panel
  */
 function close_vm_detail(vmid) {
-    is_dp_shown = false;
+    is_vmdp_shown = false;
     $('#vmdpanel').fadeToggle(100);
 }
 
