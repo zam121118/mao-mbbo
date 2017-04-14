@@ -12,7 +12,7 @@
 <style>
 html,body { margin:0; padding:0; width:100%; height:100%; overflow-y:hidden; }
 
-#main { width:100%; height:100%; overflow-y:none; }
+#main { width:100%; height:100%; overflow-y:none; background:#333333;}
 #dashboard { width:90%; height:400px; position:absolute; left:5%; bottom:5px; background:rgba(0, 0, 0, 0.75); border: 5px solid black; }
 #dashboard h2, #dashboard h3, #dashboard h4, #dashboard p, #dashboard a { color: white; padding:0; margin:0; }
 #dashboard #db-header a:hover { color:black; background:white; }
@@ -120,6 +120,7 @@ var pm_num_y = 10;
 var vms_num = 200;
 
 // colors
+var clr_background = 0x333333;
 var clr_pm = 0xFFFFFF;
 var clr_vm = 0x5DB0E0;
 var clr_vm_nouse = 0x983FD5;
@@ -517,7 +518,7 @@ function setup() {
     renderer = PIXI.autoDetectRenderer(256, 256,
         {antialias: false}
     );
-    renderer.backgroundColor = 0x333333;
+    renderer.backgroundColor = clr_background;
     renderer.view.style.position = "absolute";
     renderer.view.style.display = "block";
     renderer.autoResize = true;
