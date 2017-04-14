@@ -1,0 +1,603 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf8"/>
+<title>BBO VM Migration</title>
+<script type="text/javascript" src="./static/lib/jquery/jquery-2.1.1.js"></script>
+<script type="text/javascript" src="./static/lib/jqueryui/humanlity/jquery-ui.js"></script>
+<script type="text/javascript" src="./static/lib/dat.gui/dat.gui.js"></script>
+<script type="text/javascript" src="./static/lib/pixi.js/v4.4.4/pixi.min.js"></script>
+<link rel="stylesheet" href="./static/lib/jqueryui/humanlity/jquery-ui.css">
+<link rel="stylesheet" href="./static/lib/font-awesome/4.7.0/css/font-awesome.css">
+<style>
+html,body { margin:0; padding:0; width:100%; height:100%; overflow-y:hidden; }
+
+#main { width:100%; height:100%; overflow-y:none; }
+#dashboard { width:90%; height:400px; position:absolute; left:5%; bottom:5px; background:rgba(0, 0, 0, 0.75); border: 5px solid black; }
+#dashboard h2, #dashboard h3, #dashboard h4, #dashboard p, #dashboard a { color: white; padding:0; margin:0; }
+#dashboard #db-header a:hover { color:black; background:white; }
+#dashboard h2 { font-size:1em; border-bottom: 1px dotted #666666; line-height:1.5em; }
+#dashboard h3 { font-size:.9em; }
+#dashboard p { font-size:.8em; text-indent:.2em; }
+#dashboard a { text-decoration:none; }
+#dashboard .db-panel { margin:5px 0 0 5px; width:180px; height:170px; float:left; display:block; background:rgba(0,0,0,0.5); padding:5px; }
+
+#vmdpanel { position:absolute; top:0; left:0; padding:5px; width:120px; height:150px; background:rgba(0,0,0,0.75); border:3px solid #000000; -moz-border-radius:10px; -webkit-border-radius: 10px; border-radius:10px; }
+#vmdpanel h3, #vmdpanel p { color:white; padding:0; margin:0; }
+#vmdpanel h3 { font-size:.9em; }
+#vmdpanel p { font-size:.8em; text-indent:.2em; }
+.pm { position:relative; float:left; margin:3px; border:1px dotted #CACACA; width:150px; height:170px; }
+.box { position:relative; top:0; left:0; height:150px; border-bottom:1px dotted #CACACA; background:#FFFFFF; }
+.badge { position:relative; bottom:0; left:0; height:20px; font-size:.5em; text-indent:.5em; background:#EAEAEA; }
+.vm { position:absolute; background:#5DB0E0; }
+.vm-move { background:#FF0000; }
+.vm-available { position:absolute; background:#2CF71F; }
+</style>
+</head>
+<body>
+
+<div id="main">
+</div><!-- #main -->
+
+<div id="dashboard">
+  <div id="db-header">
+    <h2><i class="fa fa-dashboard"></i> MBBO Results Status | <a href="javascript:toggle_dashboard(1);" title="Toggle this dashboard"><small>[ toggle ]</small></a> | <a href="javascript:toggle_dashboard(0.5);" title="Toggle 1/2 this dashboard"><small>[ toggle 1/2 ]</small></a></h2>
+  </div><!-- #db-header -->
+  <div id="db-content">
+    <div class="db-panel">
+      <h3>Costs List</h3>
+        <p><i class="fa fa-flash"></i> Power: <b>13433</b></p>
+        <p><i class="fa fa-cube"></i> # of PM: <b>200</b></p>
+        <p><i class="fa fa-cubes"></i> # of VM: <b>200</b></p>
+        <p><i class="fa fa-plane"></i> # of VM mirgated: <b>32</b></p>
+    </div><!-- .db-panel -->
+
+    <div class="db-panel">
+      <h3>Performance</h3>
+      <p><i class="fa fa-clock-o"></i> Sim. Time: <b>00:21:34</b></p>
+      <p><i class="fa fa-clock-o"></i> Est. Move Time: <b>00:00:17</b></p>
+    </div><!-- .db-panel -->
+
+    <div class="db-panel">
+      <h3>Experiment Scale</h3>
+      <p><i class="fa fa-gavel"></i> # of cores: <b>16</b></p>
+      <p><i class="fa fa-microchip"></i> # of mems: <b>8 GB</b></p>
+      <p><i class="fa fa-database"></i> # of disk: <b>13.2 MB</b></p>
+      <p><i class="fa fa-sitemap"></i> # of gen.: <b>5000</b></p>
+    </div>
+
+    <div class="db-panel">
+      <h3>VM Stat.</h3>
+      <p><i class="fa fa-ravelry"></i> core: <b> 1 - 8 </b></p>
+      <p><i class="fa fa-tv"></i> mems: <b>16MB - 8GB</b></p>
+      <p><i class="fa fa-cogs"></i> I/Os: <b> 1 - 100 M/s</b></p>
+    </div>
+
+    <div class="db-panel">
+      <h3>Migration Stat.</h3>
+      <p><i class="fa fa-adjust"></i> # of shutdown: <b>24</b></p>
+      <p><i class="fa fa-truck"></i> # of mv: <b>27</b></p>
+    </div>
+  </div><!-- #db-content -->
+
+</div><!-- #dashboard -->
+
+<div id="dialog-about" title="MBBO About" style="display:none;">
+  <p>Modified biogeography-based optimisation (MBBO) <a href="https://en.wikipedia.org/wiki/Biogeography-based_optimization">( wiki )</a> is an evolutionary algorithm (EA) that optimizes a function by stochastically and iteratively improving candidate solutions with regard to a given measure of quality, or fitness function. BBO belongs to the class of metaheuristics since it includes many variations, and since it does not make any assumptions about the problem and can therefore be applied to a wide class of problems.</p>
+  <p>BBO is typically used to optimize multidimensional real-valued functions, but it does not use the gradient of the function, which means that it does not require the function to be differentiable as required by classic optimization methods such as gradient descent and quasi-newton methods. BBO can therefore be used on discontinuous functions.</p>
+  <p>BBO optimizes a problem by maintaining a population of candidate solutions, and creating new candidate solutions by combining existing ones according to a simple formula. In this way the objective function is treated as a black box that merely provides a measure of quality given a candidate solution, and the function's gradient is not needed.</p>
+  <p>Like many EAs, BBO was motivated by a natural process; in particular, BBO was motivated by biogeography, which is the study of the distribution of biological species through time and space.[1] BBO was originally introduced by Dan Simon in 2008.[2]</p>
+</div>
+
+<div id="vmdpanel" style="display:none;">
+  <h3><i class="fa fa-tv"></i> VM Detail</h3>
+  <div id="vmdp-content">
+  </div>
+</div>
+
+<script type="text/javascript">
+
+// init pm display arguments
+var pms_num = 200;
+var pm_size = 10;
+var pm_num_x = 10;
+var pm_num_y = 10;
+
+var vms_num = 200;
+
+// colors
+var clr_pm = 0xFFFFFF;
+var clr_vm = 0x5DB0E0;
+var clr_vm_nouse = 0x983FD5;
+var clr_vm_avail = 0x00FF00;
+var clr_pmbox = 0xFF0000;
+var clr_vmbox = 0xA66F00;
+
+// is vm detail panel shown
+var is_dp_shown = false;
+
+// PIXI.js objects
+var renderer, stage;
+var pms = {};
+var vms = {};
+var pmbox = null;
+var vmbox = null;
+
+/**
+ * Add 0 on the left side of a number
+ * @param {int} num any integer number
+ * @param {int} n number of total length
+ */
+function add0(num, n) {  
+    var len = num.toString().length;  
+    while(len < n) {  
+        num = "0" + num;  
+        len++;  
+    }  
+    return num;  
+} 
+
+
+/**
+ * Add a new pm(physical machine) graph graph
+ * @param {int} pm_num The number of pm
+ * @param {float} pm_cpu The percent of CPU usage of this pm,
+ *     the number ranges from 0 to 1
+ * @param {float} pm_mem the percent of MEM usage of this pm
+ * @param {float} pm_net the percent of NETWORK usage of this pm
+ * @return {boolean} returns true if the pm is added
+ */
+function add_pm(pm_num, pm_cpu, pm_mem, pm_net) {
+    var pmid = 'pm-' + pm_num;
+    pm_cpu = parseInt(pm_cpu * 100);
+    pm_mem = parseInt(pm_mem * 100);
+    pm_net = parseInt(pm_net * 100);
+
+    var x = (pm_num % pm_num_x) * (pm_size + 5) + 5;
+    var y = parseInt(pm_num / pm_num_x) * (pm_size + 5) + 5;
+
+    var pm = new PIXI.Graphics();
+    pm.id = pmid; 
+    pm.beginFill(clr_pm);
+    pm.drawRect(0, 0, pm_size, pm_size);
+    pm.x = x;
+    pm.y = y;
+    pm.endFill();
+
+    pm.interactive = true;
+    pm.on("pointerover", on_over_pm);
+    pm.on("pointerout", on_out_pm);
+
+    // add this pm to global pms dict
+    pms[pmid] = pm;
+    // add this pm to stage to render
+    stage.addChild(pm);
+    // add the pm number
+    var txt = new PIXI.Text(
+        add0(pm_num, 3),
+        {fontFamily: 'Times New Roman', fontSize: 5, fill: 'grey'}
+    );
+    txt.position.set(
+        pm.x + pm.width - txt.width - 2,
+        pm.y + 1
+    );
+    stage.addChild(txt);
+
+}
+
+/**
+ * Add some vms(virtual machine(s)) to a pm on graph
+ * @param {array} vms An array of vms
+ *      each element of vms is an array of 3 elements, for example:
+ *      [ vm_num, width(cpu), height(mem) ]
+ *      [   5   ,   0.75    ,     0.5     ]
+ * @param {int} pm_num The number of pm
+ * @return {boolean} returns true if vms are added
+ */
+function add_vms_to_pm(new_vms, pm_num) {
+    var pmid = 'pm-' + pm_num;
+    var pm = pms[pmid];
+
+    var val, vm_width, vm_height;
+    var vm_top = pm.y;
+    var vm_left = pm.x;
+    
+    console.log("adding vms["+new_vms.length+"] to pm["+pm_num+"]");
+
+    for (var i=0;i<new_vms.length;i++) {
+        val = new_vms[i];
+
+        var vmid = 'vm-' + val[0];
+        vm_width = val[1] * pm_size;
+        vm_height = val[2] * pm_size;
+
+        var x = vm_left;
+        var y = vm_top;
+
+        var vm = new PIXI.Graphics();
+        vm.id = vmid;
+        vm.beginFill(clr_vm);
+        vm.drawRect(0, 0, vm_width, vm_height);
+        vm.x = x;
+        vm.y = y;
+        vm.endFill();
+        vm.alpha = 0.8;
+
+        // attach events
+        vm.interactive = true;
+        vm.on('pointerover', on_over_vm);
+        vm.on('pointerout', on_out_vm);
+
+        // add this pm to pms dict
+        vms[vmid] = vm;
+
+        stage.addChild(vm);
+
+        // update the position for next element
+        vm_top += vm_height;
+        vm_left += vm_width;
+    }
+   
+    // add an available CPU/MEM green block on pm
+    var vm_a = new PIXI.Graphics();
+    vm_a.id = 'vma-' + pm_num;
+    if (pm.x == vm_left) {
+        vm_a.beginFill(clr_vm_nouse);
+    } else {
+        vm_a.beginFill(clr_vm_avail);
+    }
+    vm_a.drawRect(0, 0, 
+        pm.x + pm_size - vm_left,
+        pm.y + pm_size - vm_top);
+    vm_a.endFill();
+    vm_a.x = vm_left;
+    vm_a.y = vm_top;
+    vm_a.alpha = 0.5;
+    stage.addChild(vm_a);
+
+    return true;
+}
+
+/**
+ * Mouse over event handler for PM
+ */
+function on_over_pm() {
+    this.is_over = true;
+    if (pmbox==null) {
+        pmbox = new PIXI.Graphics();
+        pmbox.lineStyle(2, clr_pmbox, 1);
+        pmbox.drawRect(0, 0, pm_size+1, pm_size+1);
+        pmbox.alpha = 0.75;
+        stage.addChild(pmbox);
+    }
+    pmbox.x = this.x;
+    pmbox.y = this.y;
+}
+
+/**
+ * Mouse out event handler for PM
+ */
+function on_out_pm() {
+    this.is_over = false;
+    //console.log("out " + this.id);
+}
+
+/**
+ * Mouse over event handler for VM
+ */
+function on_over_vm() {
+    this.is_over = true;
+    if (vmbox==null) {
+        vmbox = new PIXI.Graphics();
+        stage.addChild(vmbox);
+    }
+    vmbox.lineStyle(1, clr_vmbox, 1);
+    vmbox.alpha = 0.75;
+    vmbox.x = this.x;
+    vmbox.y = this.y;
+    vmbox.drawRect(0, 0, this.width, this.height);
+
+    show_vm_detail(this.id);
+}
+
+/**
+ * Mouse out event handler
+ */
+function on_out_vm() {
+    this.is_over = false;
+    vmbox.clear();
+    close_vm_detail(this.id);
+}
+
+/**
+ * Display the VM detail information panel
+ */
+function show_vm_detail(vmid) {
+    if (is_dp_shown) {
+        return;
+    }
+    var vm = vms[vmid];
+    $('#vmdp-content').html(
+        "<p>#: <b>"+vmid+"</b></p>" +
+        "<p>CPU: <b>"+(vm.width/pm_size).toFixed(4)+"</b></p>" +
+        "<p>MEM: <b>"+(vm.height/pm_size).toFixed(4)+"</b></p>" +
+        "<p>ALPHA: <b>"+(Math.random()).toFixed(4)+"</b></p>" +
+        "<p>POWER: <b>"+(200*Math.random()).toFixed(4)+"</b></p>" +
+        "<p>SQUAR: <b>"+(vm.width*vm.height/10).toFixed(2)+"</b></p>" +
+        "<p>MIRGT: <b>"+(Math.random()).toFixed(2)+"</b></p>" 
+
+    );
+    // calc the position of this panel
+    // when near the bottom or right edge, reset the value
+    var x = parseInt(vm.x + vm.width + 3);
+    var y = parseInt(vm.y);
+    if (x + 110 > window.innerWidth) { x = vm.x - 140; }
+    if (y + 160 > window.innerHeight) { y = vm.y - 160; }
+    $('#vmdpanel')
+        .css('left', x + 'px')
+        .css('top', y + 'px')
+        .fadeToggle(100);
+    is_dp_shown = true; 
+}
+
+/**
+ * Remove the VM detail information panel
+ */
+function close_vm_detail(vmid) {
+    is_dp_shown = false;
+    $('#vmdpanel').fadeToggle(100);
+}
+
+/**
+ * Mark the vms which are planned to move
+ * @param {int} vm_num The number of vm to move
+ * @param {int} pm_from The number of pm where now the vm is
+ * @param {int} pm_to The number of pm which the vm is about to put
+ */
+function mark_move_vm(vm_num, pm_num_from, pm_num_to) {
+    var vmid = 'vm-' + vm_num;
+    var vm = vms[vmid];
+    vm.beginFill(0xFF0000);
+    vm.drawRect(0, 0, vm.width, vm.height);
+    vm.endFill();
+
+    // draw a line
+    var pm_to = pms['pm-'+pm_num_to];
+    var ln = new PIXI.Graphics();
+    ln.lineStyle(1, 0xFF0000, 1);
+    ln.alpha = 0.5;
+    ln.moveTo(vm.x + vm.width/2, vm.y + vm.height/2);
+    //ln.lineTo(pm_to.x+pm_to.width/2, pm_to.y+pm_to.height/2);
+    ln.bezierCurveTo(
+        (vm.x + pm_to.x)/2,
+        (vm.y + pm_to.y)/2,
+        (vm.x + pm_to.x)/2,
+        (vm.y + pm_to.y)/2,
+        pm_to.x + pm_to.width/2,
+        pm_to.y + pm_to.height/2
+    );
+    //ln.x = vm.x + vm.width/2;
+    //ln.y = vm.y + vm.height/2;
+    stage.addChild(ln);
+
+}
+
+
+/**
+ * Draw according to data
+ * @param {object} data The json object
+ */
+function draw(data) {
+    // TODO hehuan clean the current draw should be done here
+
+    // first, create pms
+    for (var i=0;i<data.pms_num;i++) {
+        add_pm(i, data.pms[i][0], data.pms[i][1], data.pms[i][2]);
+    }
+
+    // second, add vms to pms
+    for (var i=0;i<data.state.length;i++) {
+        // construct an array for drawing
+        // `i` is pm_num
+        var vms = [];
+        for (var j=0;j<data.state[i].length;j++) {
+            vms.push([
+                data.state[i][j],
+                data.vms[data.state[i][j]][0],
+                data.vms[data.state[i][j]][1]
+            ]);
+        }
+        add_vms_to_pm(vms, i);
+    }
+
+    // last, mark the plan
+    for (var i=0;i<data.plan.length;i++) {
+        mark_move_vm(i, data.plan[i][0], data.plan[i][1]);
+    } 
+}
+
+/**
+ * Generate simuation init data
+ * @param {int} pms_num The number of pm
+ * @param {int} vms_num The number of vm
+ * @return {object} return what we want
+ */
+function gen_simulation_init_data(pms_num, vms_num) {
+}
+
+/**
+ * Change the size of PM and number according to screen size
+ */
+function update_params() {
+    // re-calc size
+    pm_size = calc_pm_width(pms_num);
+    pm_num_x = parseInt(window.innerWidth / (pm_size+5));
+}
+
+/**
+ * Create the scene
+ */
+function setup() {
+    // pixi.js elements
+    renderer = PIXI.autoDetectRenderer(256, 256,
+        {antialias: false}
+    );
+    renderer.backgroundColor = 0x333333;
+    renderer.view.style.position = "absolute";
+    renderer.view.style.display = "block";
+    renderer.autoResize = true;
+    renderer.resize(window.innerWidth, window.innerHeight);
+    //document.body.appendChild(renderer.view);
+    $('#main').append(renderer.view);
+
+    stage = new PIXI.Container();
+
+    init_datgui();
+    // start loop
+    game_loop();
+}
+
+/**
+ * Main loop
+ */
+function game_loop() {
+    requestAnimationFrame(game_loop);
+
+    // other animation of updating status here:
+    
+    renderer.render(stage);
+}
+
+/**
+ * Calculate PM edge size according to number and current window size
+ * @param {int} pms_num The number of PMs
+ * @return {int} returns the edge size of a PM
+ */
+function calc_pm_width(pms_num) {
+    var ww = window.innerWidth;
+    var wh = window.innerHeight;
+
+    var delta_a = 3;
+    var a = 200;
+
+    var cw, ch;
+    var flag = false;
+
+    while(true) {
+        cw = parseInt(ww / (a+5));
+        ch = parseInt(wh / (a+5));
+        if (cw * ch < pms_num) {
+            a = a - delta_a;
+            if (a < 10) {
+                break;
+            }
+        } else {
+            flag = true;
+            break;
+        }
+    }
+
+    if (flag) {
+        return a;
+    } else {
+        return 10;
+    }
+}
+
+/**
+ * Configs and dashboard functions
+ */
+var config = {
+    // Init parameters
+    pms_num: 200,
+    vms_num: 200,
+    vmcpu_dist: 'uniform',
+    vmmem_dist: 'uniform',
+    vm_cpumem_dists: ['uniform', 'zipf', 'normal'],
+    // BBO parameters
+    popu_num: 9,
+    muta_num: 7,
+    iter_num: 500,
+    gene_num: 5000,
+    // functions for debug
+    init_cluster: function() {
+        console.log('generating init data...');
+        alert('not implemented');
+    },
+    tour_vms: function() {
+        console.log('tour is NOT developed yet');
+    },
+    about: function() {
+        console.log('showing about...');
+        $("#dialog-about").dialog({modal: true, width:'800px'});
+    }
+};
+
+/**
+ * Using dat.gui requires a initialization
+ */
+function init_datgui() {
+    var gui = new dat.GUI();
+
+    var f1 = gui.addFolder('Init Cluster Parameters');
+    f1.add(config, 'pms_num', 3, 500);
+    f1.add(config, 'vms_num', 10, 800);
+    f1.add(config, 'vmcpu_dist', config.vm_cpumem_dists);
+    f1.add(config, 'vmmem_dist', config.vm_cpumem_dists);
+    f1.open();
+
+    var f2 = gui.addFolder('BBO Parameters');
+    f2.add(config, 'popu_num', 5, 20);
+    f2.add(config, 'muta_num', 5, 20);
+    f2.add(config, 'iter_num', 100, 1000);
+    f2.add(config, 'gene_num', 100, 10000);
+
+    gui.add(config, 'init_cluster');
+    gui.add(config, 'about');
+}
+
+/**
+ * Display/Close the dashboard of general information
+ * @param {float} size Toggle half or full size of dashboard
+ */
+function toggle_dashboard(size) {
+    if ($('#dashboard').css('bottom')=='5px') {
+        if (size==1) {
+            $('#dashboard').animate({bottom:'-370px'});
+        } else if (size==0.5) {
+            $('#dashboard').animate({bottom:'-180px'});
+        }
+    } else {
+        $('#dashboard').animate({bottom:'5px'});
+    }
+}
+
+/**
+ * Send request to server to get MBBO result data
+ */
+function get_mbbo_result() {
+    // get data and update this viz!
+    $.get(
+        'data-mbbo.json',
+        {},
+        function(data) {
+            tmp = data;
+            // the number of pms and vms are updated when data is loaded 
+            pms_num = data.pms_num;
+            vms_num = data.vms_num;
+            update_params();
+
+            draw(data);
+        },'json'
+    );
+}
+
+// start this viz!
+$(document).ready(function(){
+    setup();
+    get_mbbo_result();
+});
+
+</script>
+</body>
+</html>

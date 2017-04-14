@@ -1,0 +1,238 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf8"/>
+<title>BBO VM Migration</title>
+<script type="text/javascript" src="./static/lib/jquery/jquery-2.1.1.js"></script>
+<script type="text/javascript" src="./static/lib/jqueryui/humanlity/jquery-ui.js"></script>
+<script type="text/javascript" src="./static/lib/dat.gui/dat.gui.js"></script>
+<link rel="stylesheet" href="./static/lib/jqueryui/humanlity/jquery-ui.css">
+<style>
+html,body { margin:0; padding:0; width:100%; height:100%; }
+#wrapper { width:100%; height:100%; }
+#main { width:100%; height:100%; }
+.pm { position:relative; float:left; margin:3px; border:1px dotted #CACACA; width:150px; height:170px; }
+.box { position:relative; top:0; left:0; height:150px; border-bottom:1px dotted #CACACA; background:#FFFFFF; }
+.badge { position:relative; bottom:0; left:0; height:20px; font-size:.5em; text-indent:.5em; background:#EAEAEA; }
+.vm { position:absolute; background:#5DB0E0; }
+.vm-move { background:#FF0000; }
+.vm-available { position:absolute; background:#2CF71F; }
+</style>
+</head>
+<body>
+<div id="wrapper">
+  <div id="main">
+  </div><!-- /#main -->
+</div><!-- /#wrapper -->
+
+<div id="dialog-about" title="About This Demo" style="display:none;">
+  <p>This demo is ...</p>
+</div>
+
+<script type="text/javascript">
+
+var PM_WIDTH = 150;
+var PM_HEIGHT = 150;
+var tmp;
+
+/**
+ * Configs and dashboard functions
+ */
+var config = {
+    // Init parameters
+    pms_num: 10,
+    vms_num: 30,
+    // BBO parameters
+    pop_num: 9,
+    x_num: 7,
+    iter_num: 500,
+    // functions for debug
+    init_cluster: function() {
+        console.log('generating init data...');
+    },
+    about: function() {
+        console.log('showing about...');
+        $("#dialog-about").dialog({modal: true});
+    }
+};
+
+var gui = new dat.GUI();
+
+var f1 = gui.addFolder('Init Cluster Parameters');
+f1.add(config, 'pms_num', 3, 100);
+f1.add(config, 'vms_num', 10, 300);
+f1.open();
+
+var f2 = gui.addFolder('BBO Parameters');
+f2.add(config, 'pop_num', 5, 20);
+f2.add(config, 'x_num', 5, 20);
+f2.add(config, 'iter_num', 100, 1000);
+
+gui.add(config, 'init_cluster');
+gui.add(config, 'about');
+
+
+/**
+ * Add 0 on the left side of a number
+ * @param {int} num any integer number
+ * @param {int} n number of total length
+ */
+function add0(num, n) {  
+    var len = num.toString().length;  
+    while(len < n) {  
+        num = "0" + num;  
+        len++;  
+    }  
+    return num;  
+} 
+
+
+/**
+ * Add a new pm(physical machine) graph graph
+ * @param {int} pm_num The number of pm
+ * @param {float} pm_cpu The percent of CPU usage of this pm,
+ *     the number ranges from 0 to 1
+ * @param {float} pm_mem the percent of MEM usage of this pm
+ * @param {float} pm_net the percent of NETWORK usage of this pm
+ * @return {boolean} returns true if the pm is added
+ */
+function add_pm(pm_num, pm_cpu, pm_mem, pm_net) {
+    var pmid = 'pm-' + pm_num;
+    pm_cpu = parseInt(pm_cpu * 100);
+    pm_mem = parseInt(pm_mem * 100);
+    pm_net = parseInt(pm_net * 100);
+
+    var pm = $(
+        '<div class="pm">' +
+        '  <div class="box" id="box-' + pmid + '"></div>' +
+        '  <div class="badge">' + 
+        '    <span class="badge-pmid"><b>' + add0(pm_num, 3) + '</b></span> | ' +
+        '    <span class="badge-info">C: ' + pm_cpu + '% M: ' + pm_mem + '% N: ' + pm_net + '%</span>' +
+        '  </div>' +
+        '</div>'
+    );
+    pm.attr('id', pmid);
+    pm.appendTo("#main");
+    return true;
+}
+
+/**
+ * Add some vms(virtual machine(s)) to a pm on graph
+ * @param {array} vms An array of vms
+ *      each element of vms is an array of 3 elements, for example:
+ *      [ vm_num, width(cpu), height(mem) ]
+ *      [   5   ,   0.75    ,     0.5     ]
+ * @param {int} pm_num The number of pm
+ * @return {boolean} returns true if vms are added
+ */
+function add_vms_to_pm(vms, pm_num) {
+    var box_pm = $('#box-pm-' + pm_num);
+    var val, vm_width, vm_height;
+    var vm_top = 0;
+    var vm_left = 0;
+    
+    for (var i=0;i<vms.length;i++) {
+        console.log("adding vms["+i+"]/"+vms.length+" to pm["+pm_num+"]");
+        val = vms[i];
+        vm_width = val[1] * PM_WIDTH;
+        vm_height = val[2] * PM_WIDTH;
+
+        var vm = $('<div class="vm">');
+        vm.attr('id', 'vm-'+val[0]);
+        vm.attr('title', 'CPU: ' + val[1] + ' / MEM: ' + val[2]);
+        vm.css('width', vm_width + 'px');
+        vm.css('height', vm_height + 'px');
+        vm.css('top', vm_top + 'px');
+        vm.css('left', vm_left + 'px');
+
+        // Bind event
+        vm.on("mouseover", function() {
+            console.log(this.id);
+        });
+
+        // update the position for next element
+        vm_top += vm_height;
+        vm_left += vm_width;
+
+        box_pm.append(vm);
+    }
+
+    // add a box on corner
+    var vm_a = $('<div class="vm-available">');
+    vm_a.attr('id', 'vma-pm-'+pm_num);
+    vm_a.css('width', (PM_WIDTH - vm_left) + 'px');
+    vm_a.css('height', (PM_HEIGHT - vm_top) + 'px');
+    vm_a.css('top', vm_top + 'px');
+    vm_a.css('left', vm_left + 'px');
+    box_pm.append(vm_a);
+
+    return true;
+}
+
+/**
+ * Mark the vms which are planned to move
+ * @param {int} vm_num The number of vm to move
+ * @param {int} pm_from The number of pm where now the vm is
+ * @param {int} pm_to The number of pm which the vm is about to put
+ */
+function mark_move_vm(vm_num, pm_from, pm_to) {
+    var vmid = 'vm-' + vm_num;
+    $("#"+vmid).addClass('vm-move')
+        .attr('title', "Move " + vmid + ": pm-" + pm_from + " -> pm" + pm_to);
+}
+
+
+/**
+ * Draw according to data
+ * @param {object} data The json object
+ */
+function draw(data) {
+    // first, create pms
+    for (var i=0;i<data.pms_num;i++) {
+        add_pm(i, data.pms[i][0], data.pms[i][1], data.pms[i][2]);
+    }
+
+    // second, add vms to pms
+    for (var i=0;i<data.state.length;i++) {
+        // construct an array for drawing
+        // `i` is pm_num
+        var vms = [];
+        for (var j=0;j<data.state[i].length;j++) {
+            vms.push([
+                data.state[i][j],
+                data.vms[data.state[i][j]][0],
+                data.vms[data.state[i][j]][1]
+            ]);
+        }
+        add_vms_to_pm(vms, i);
+    }
+
+    // last, mark the plan
+    for (var i=0;i<data.plan.length;i++) {
+        mark_move_vm(i, data.plan[i][0], data.plan[i][1]);
+    }
+}
+
+/**
+ * Generate simuation init data
+ * @param {int} pms_num The number of pm
+ * @param {int} vms_num The number of vm
+ * @return {object} return what we want
+ */
+function gen_simulation_init_data(pms_num, vms_num) {
+}
+
+$(document).ready(function(){
+    // Demo data
+    $.get(
+        'data-mbbo.json',
+        {},
+        function(data) {
+            tmp = data;
+            draw(data);
+        },'json'
+    );
+});
+</script>
+</body>
+</html>
