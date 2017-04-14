@@ -15,3 +15,7 @@ Like many EAs, BBO was motivated by a natural process; in particular, BBO was mo
 ## Features
 
 ## Demo
+
+The visualization powered by pixi.js:
+
+![pixi.js version](https://github.com/zam121118/mao-mbbo/blob/hh-dev/viz/static/img/demo.png?raw=true)
