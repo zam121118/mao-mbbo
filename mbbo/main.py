@@ -309,7 +309,7 @@ def migrateRate(size):
         mu[i] = math.sin(float(size - (i + 1)) / size)                  # 迁出率
     return lambdaa,mu
 
-def main(generation,size,num_var,p_mutate,f,rp_u,rm_u,p,time_base):
+def main(generation,size,num_var,p):
     '''
     目标：控制入口函数
     参数：
@@ -327,12 +327,12 @@ def main(generation,size,num_var,p_mutate,f,rp_u,rm_u,p,time_base):
     # generation = 1000
     # size = 10
     # num_var = 200
-    # p_mutate = 0.01
-    # f = 0.6
-    # rp_u = 0.25
-    # rm_u = 0.25
+    p_mutate = 0.01
+    f = 0.6
+    rp_u = 0.25
+    rm_u = 0.25
     # p = 1.0
-    # time_base = 65
+    time_base = 65
 
     # random create num_var vms with cpu,mem requirements
     rp,rm = initVMResrcs(rp_u,rm_u,p,num_var)
@@ -388,4 +388,4 @@ def main(generation,size,num_var,p_mutate,f,rp_u,rm_u,p,time_base):
         print "json file has writen"
 
 if __name__ == '__main__':
-    main(5000,10,200,0.01,0.6,0.25,0.25,1.0,65)
+    main(5000,10,200,1.0)
