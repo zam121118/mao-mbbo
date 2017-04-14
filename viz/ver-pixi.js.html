@@ -22,7 +22,7 @@ html,body { margin:0; padding:0; width:100%; height:100%; overflow-y:hidden; }
 #dashboard a { text-decoration:none; }
 #dashboard .db-panel { margin:5px 0 0 5px; width:180px; height:170px; float:left; display:block; background:rgba(0,0,0,0.5); padding:5px; }
 
-#vmdpanel { position:absolute; top:0; left:0; padding:5px; width:120px; height:150px; background:rgba(0,0,0,0.75); border:3px solid #000000; -moz-border-radius:10px; -webkit-border-radius: 10px; border-radius:10px; }
+#vmdpanel { position:absolute; top:0; left:0; padding:5px; width:160px; height:160px; background:rgba(0,0,0,0.75); border:3px solid #000000; -moz-border-radius:10px; -webkit-border-radius: 10px; border-radius:10px; }
 #vmdpanel h3, #vmdpanel p { color:white; padding:0; margin:0; }
 #vmdpanel h3 { font-size:.9em; }
 #vmdpanel p { font-size:.8em; text-indent:.2em; }
@@ -96,6 +96,8 @@ html,body { margin:0; padding:0; width:100%; height:100%; overflow-y:hidden; }
 </div>
 
 <script type="text/javascript">
+// data object
+var dataobj = null;
 
 // init pm display arguments
 var pms_num = 200;
@@ -118,8 +120,9 @@ var is_dp_shown = false;
 
 // PIXI.js objects
 var renderer, stage;
-var pms = {};
-var vms = {};
+var pms = {}; // physical machines
+var vms = {}; // virtual machines
+var mls = {}; // migration lines
 var pmbox = null;
 var vmbox = null;
 
@@ -128,14 +131,14 @@ var vmbox = null;
  * @param {int} num any integer number
  * @param {int} n number of total length
  */
-function add0(num, n) {  
-    var len = num.toString().length;  
-    while(len < n) {  
-        num = "0" + num;  
-        len++;  
-    }  
-    return num;  
-} 
+function add0(num, n) {
+    var len = num.toString().length;
+    while(len < n) {
+        num = "0" + num;
+        len++;
+    }
+    return num;
+}
 
 
 /**
@@ -157,7 +160,7 @@ function add_pm(pm_num, pm_cpu, pm_mem, pm_net) {
     var y = parseInt(pm_num / pm_num_x) * (pm_size + 5) + 5;
 
     var pm = new PIXI.Graphics();
-    pm.id = pmid; 
+    pm.id = pmid;
     pm.beginFill(clr_pm);
     pm.drawRect(0, 0, pm_size, pm_size);
     pm.x = x;
@@ -201,7 +204,7 @@ function add_vms_to_pm(new_vms, pm_num) {
     var val, vm_width, vm_height;
     var vm_top = pm.y;
     var vm_left = pm.x;
-    
+
     console.log("adding vms["+new_vms.length+"] to pm["+pm_num+"]");
 
     for (var i=0;i<new_vms.length;i++) {
@@ -237,7 +240,7 @@ function add_vms_to_pm(new_vms, pm_num) {
         vm_top += vm_height;
         vm_left += vm_width;
     }
-   
+
     // add an available CPU/MEM green block on pm
     var vm_a = new PIXI.Graphics();
     vm_a.id = 'vma-' + pm_num;
@@ -246,7 +249,7 @@ function add_vms_to_pm(new_vms, pm_num) {
     } else {
         vm_a.beginFill(clr_vm_avail);
     }
-    vm_a.drawRect(0, 0, 
+    vm_a.drawRect(0, 0,
         pm.x + pm_size - vm_left,
         pm.y + pm_size - vm_top);
     vm_a.endFill();
@@ -297,6 +300,10 @@ function on_over_vm() {
     vmbox.y = this.y;
     vmbox.drawRect(0, 0, this.width, this.height);
 
+    // highlight the migration line
+    var ln = mls[this.id];
+    ln.alpha = 1;
+
     show_vm_detail(this.id);
 }
 
@@ -306,6 +313,10 @@ function on_over_vm() {
 function on_out_vm() {
     this.is_over = false;
     vmbox.clear();
+    // fade the migration line
+    var ln = mls[this.id];
+    ln.alpha = .1;
+
     close_vm_detail(this.id);
 }
 
@@ -324,7 +335,8 @@ function show_vm_detail(vmid) {
         "<p>ALPHA: <b>"+(Math.random()).toFixed(4)+"</b></p>" +
         "<p>POWER: <b>"+(200*Math.random()).toFixed(4)+"</b></p>" +
         "<p>SQUAR: <b>"+(vm.width*vm.height/10).toFixed(2)+"</b></p>" +
-        "<p>MIRGT: <b>"+(Math.random()).toFixed(2)+"</b></p>" 
+        "<p>MIRGT: <b>"+(Math.random()).toFixed(2)+"</b></p>" +
+        "<p>PMMS: <i class='fa fa-cube'></i> "+vm.pm_num_from+" -> <i class='fa fa-cube'></i> "+vm.pm_num_to+"</p>"
 
     );
     // calc the position of this panel
@@ -337,7 +349,7 @@ function show_vm_detail(vmid) {
         .css('left', x + 'px')
         .css('top', y + 'px')
         .fadeToggle(100);
-    is_dp_shown = true; 
+    is_dp_shown = true;
 }
 
 /**
@@ -355,19 +367,24 @@ function close_vm_detail(vmid) {
  * @param {int} pm_to The number of pm which the vm is about to put
  */
 function mark_move_vm(vm_num, pm_num_from, pm_num_to) {
+    console.log("draw vm "+pm_num_from+" -> " + pm_num_to);
     var vmid = 'vm-' + vm_num;
+    vms[vmid]['pm_num_from'] = pm_num_from;
+    vms[vmid]['pm_num_to'] = pm_num_to;
     var vm = vms[vmid];
     vm.beginFill(0xFF0000);
     vm.drawRect(0, 0, vm.width, vm.height);
     vm.endFill();
+    vm.alpha = 0.7;
 
     // draw a line
-    var pm_to = pms['pm-'+pm_num_to];
+    var pm_from = pms['pm-'+pm_num_from];
     var ln = new PIXI.Graphics();
     ln.lineStyle(1, 0xFF0000, 1);
-    ln.alpha = 0.5;
-    ln.moveTo(vm.x + vm.width/2, vm.y + vm.height/2);
-    //ln.lineTo(pm_to.x+pm_to.width/2, pm_to.y+pm_to.height/2);
+    ln.alpha = 0.1;
+    ln.moveTo(pm_from.x + pm_from.width/2, pm_from.y + pm_from.height/2);
+    ln.lineTo(vm.x + vm.width/2, vm.y + vm.height/2);
+    /*
     ln.bezierCurveTo(
         (vm.x + pm_to.x)/2,
         (vm.y + pm_to.y)/2,
@@ -376,10 +393,14 @@ function mark_move_vm(vm_num, pm_num_from, pm_num_to) {
         pm_to.x + pm_to.width/2,
         pm_to.y + pm_to.height/2
     );
+    */
     //ln.x = vm.x + vm.width/2;
     //ln.y = vm.y + vm.height/2;
-    stage.addChild(ln);
 
+    // add this ln to global
+    mls[vmid] = ln;
+
+    stage.addChild(ln);
 }
 
 
@@ -413,7 +434,7 @@ function draw(data) {
     // last, mark the plan
     for (var i=0;i<data.plan.length;i++) {
         mark_move_vm(i, data.plan[i][0], data.plan[i][1]);
-    } 
+    }
 }
 
 /**
@@ -464,7 +485,7 @@ function game_loop() {
     requestAnimationFrame(game_loop);
 
     // other animation of updating status here:
-    
+
     renderer.render(stage);
 }
 
@@ -582,7 +603,8 @@ function get_mbbo_result() {
         {},
         function(data) {
             tmp = data;
-            // the number of pms and vms are updated when data is loaded 
+            dataobj = data;
+            // the number of pms and vms are updated when data is loaded
             pms_num = data.pms_num;
             vms_num = data.vms_num;
             update_params();
