@@ -86,3 +86,6 @@ ENV/
 
 # Rope project settings
 .ropeproject
+
+# The record to have the output of mbbo algrithm
+out.txt
