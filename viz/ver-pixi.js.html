@@ -361,7 +361,8 @@ function show_pm_detail(pmid) {
     $('#pmdp-content').html(
         "<p>#: <b>"+pmid+"</b></p>" +
         "<p>U.CPU: <b>"+pm_data[0].toFixed(4)+"</b></p>" +
-        "<p>U.MEM: <b>"+pm_data[1].toFixed(4)+"</b></p>"
+        "<p>U.MEM: <b>"+pm_data[1].toFixed(4)+"</b></p>" +
+        "<p>VMS: "+pm_state
     );
     // calc the position of this panel
     // when near the bottom or right edge, reset the value
