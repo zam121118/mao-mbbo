@@ -354,9 +354,6 @@ function on_out_vm() {
  * Display the PM detail information panel
  */
 function show_pm_detail(pmid) {
-    if (is_pmdp_shown) {
-        return;
-    }
     var pm = pms[pmid];
     var pm_num = parseInt(pmid.split('-')[1]);
     var pm_data = dataobj.pms[pm_num];
@@ -364,8 +361,7 @@ function show_pm_detail(pmid) {
     $('#pmdp-content').html(
         "<p>#: <b>"+pmid+"</b></p>" +
         "<p>U.CPU: <b>"+pm_data[0].toFixed(4)+"</b></p>" +
-        "<p>U.MEM: <b>"+pm_data[1].toFixed(4)+"</b></p>" +
-        "<p>VMS: " + pm_state
+        "<p>U.MEM: <b>"+pm_data[1].toFixed(4)+"</b></p>"
     );
     // calc the position of this panel
     // when near the bottom or right edge, reset the value
@@ -392,9 +388,6 @@ function close_pm_detail(pmid) {
  * Display the VM detail information panel
  */
 function show_vm_detail(vmid) {
-    if (is_vmdp_shown) {
-        return;
-    }
     var vm = vms[vmid];
     $('#vmdp-content').html(
         "<p>#: <b>"+vmid+"</b></p>" +
