@@ -299,7 +299,7 @@ def createJSON(init_population1,save_chrom,save_cost):
     data['HSI_cost'].append(elite_cost)
 
     # 导出为json文件
-    json.dump(data, open('/home/amy/repos/mao-mbbo/viz/data-mbbo.json','w'))
+    json.dump(data, open('/home/amy/repos/mao-mbbo/viz/data-mbbo.json','w'),indent=2)
     return True
 
 
@@ -411,4 +411,4 @@ def main(generation,size,num_var,p):
         print "json file has writen"
 
 if __name__ == '__main__':
-    main(10000,10,200,1.0)
+    main(1000,10,200,1.0)
