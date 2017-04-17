@@ -13,8 +13,8 @@
 html,body { margin:0; padding:0; width:100%; height:100%; overflow-y:hidden; }
 
 #main { width:100%; height:100%; overflow-y:none; background:#333333;}
-#dashboard { width:90%; height:400px; position:absolute; left:5%;
-  bottom:5px; background:rgba(0, 0, 0, 0.75); border: 5px solid black; }
+#dashboard { width:80%; height:400px; position:absolute; left:10%;
+  bottom:-180px; background:rgba(0, 0, 0, 0.75); border: 5px solid black; }
 #dashboard h2, #dashboard h3, #dashboard h4, #dashboard p, #dashboard a { color: white; padding:0; margin:0; }
 #dashboard #db-header a:hover { color:black; background:white; }
 #dashboard h2 { font-size:1em; border-bottom: 1px dotted #666666; line-height:1.5em; }
@@ -58,7 +58,8 @@ html,body { margin:0; padding:0; width:100%; height:100%; overflow-y:hidden; }
   <div id="db-header">
     <h2><i class="fa fa-dashboard"></i> MBBO Results Status |
       <a href="javascript:toggle_dashboard(1);" title="Toggle this dashboard"><small>[ toggle ]</small></a> |
-      <a href="javascript:toggle_dashboard(0.5);" title="Toggle 1/2 this dashboard"><small>[ toggle 1/2 ]</small></a>
+      <a href="javascript:toggle_dashboard(0.5);" title="Toggle 1/2 this dashboard"><small>[ 1/2 ]</small></a> |
+      <a href="javascript:toggle_dashboard(0);" title="Close this dashboard"><small>[ X ]</small></a>
     </h2>
   </div><!-- #db-header -->
   <div id="db-content">
@@ -513,14 +514,6 @@ function draw(data) {
 function gen_simulation_init_data(pms_num, vms_num) {
 }
 
-/**
- * Change the size of PM and number according to screen size
- */
-function update_params() {
-    // re-calc size
-    pm_size = calc_pm_width(pms_num);
-    pm_num_x = parseInt(window.innerWidth / (pm_size+5));
-}
 
 /**
  * Create the scene
@@ -550,10 +543,120 @@ function setup() {
  */
 function game_loop() {
     requestAnimationFrame(game_loop);
-
     // other animation of updating status here:
 
     renderer.render(stage);
+}
+
+
+/**
+ * Configs and dashboard functions
+ */
+var config = {
+    // Init parameters
+    pms_num: 200,
+    vms_num: 200,
+    vmcpu_dist: 'uniform',
+    vmmem_dist: 'uniform',
+    vm_cpumem_dists: ['uniform', 'zipf', 'normal'],
+    // BBO parameters
+    popu_num: 9,
+    muta_num: 7,
+    iter_num: 500,
+    gene_num: 5000,
+    data_fn: 'data-mbbo',
+    get_dfn: function(dn) {
+        return dn + '.json';
+    },
+    load_data: function() {
+        get_mbbo_result(config.get_dfn(config.data_fn));
+    },
+    tour_vms: function() {
+        console.log('tour is NOT developed yet');
+    },
+    about: function() {
+        console.log('showing about...');
+        $("#dialog-about").dialog({modal: true, width:'800px'});
+    }
+};
+
+/**
+ * Using dat.gui requires a initialization
+ */
+function init_datgui() {
+    var gui = new dat.GUI();
+
+    var f1 = gui.addFolder('Init Cluster Parameters');
+    f1.add(config, 'pms_num', 3, 500);
+    f1.add(config, 'vms_num', 10, 800);
+    f1.add(config, 'vmcpu_dist', config.vm_cpumem_dists);
+    f1.add(config, 'vmmem_dist', config.vm_cpumem_dists);
+    f1.open();
+
+    var f2 = gui.addFolder('BBO Parameters');
+    f2.add(config, 'popu_num', 5, 20);
+    f2.add(config, 'muta_num', 5, 20);
+    f2.add(config, 'iter_num', 100, 1000);
+    f2.add(config, 'gene_num', 100, 10000);
+
+    var f3 = gui.addFolder('History Results');
+    f3.add(config, 'data_fn')
+      .onFinishChange(function(v) {
+        config.load_data();
+      });
+
+    f3.add(config, 'load_data');
+    gui.add(config, 'about');
+}
+
+/**
+ * Display/Close the dashboard of general information
+ * @param {float} size Toggle half or full size of dashboard
+ */
+function toggle_dashboard(size) {
+    if (size==0) {
+        $('#dashboard').animate({bottom:'-370px'});
+    } else if ($('#dashboard').css('bottom')=='5px') {
+        if (size==1) {
+            $('#dashboard').animate({bottom:'-370px'});
+        } else if (size==0.5) {
+            $('#dashboard').animate({bottom:'-180px'});
+        }
+    } else {
+        $('#dashboard').animate({bottom:'5px'});
+    }
+}
+
+/**
+ * Send request to server to get MBBO result data
+ */
+function get_mbbo_result(data_url) {
+    // get data and update this viz!
+    $.get(
+        data_url,
+        {},
+        function(data) {
+            // Use this data to update PM/VM detail panel
+            dataobj = data;
+            // Clear all objects on stage
+            stage.removeChildren();
+            // Draw new elements
+            update_global_params(data);
+            draw(data);
+        },'json'
+    );
+}
+
+/**
+ * Change the size of PM and number according to screen size
+ */
+function update_global_params(data) {
+    // re-calc size
+    // the number of pms and vms are updated when data is loaded
+    pms_num = data.pms_num;
+    vms_num = data.vms_num;
+    pm_size = calc_pm_width(pms_num);
+    pm_num_x = parseInt(window.innerWidth / (pm_size+5));
 }
 
 /**
@@ -592,106 +695,10 @@ function calc_pm_width(pms_num) {
     }
 }
 
-/**
- * Configs and dashboard functions
- */
-var config = {
-    // Init parameters
-    pms_num: 200,
-    vms_num: 200,
-    vmcpu_dist: 'uniform',
-    vmmem_dist: 'uniform',
-    vm_cpumem_dists: ['uniform', 'zipf', 'normal'],
-    // BBO parameters
-    popu_num: 9,
-    muta_num: 7,
-    iter_num: 500,
-    gene_num: 5000,
-    data_fn: ['data-demo.json', 'data-mbbo.json'],
-    // functions for debug
-    init_cluster: function() {
-        console.log('generating init data...');
-        alert('not implemented');
-    },
-    tour_vms: function() {
-        console.log('tour is NOT developed yet');
-    },
-    about: function() {
-        console.log('showing about...');
-        $("#dialog-about").dialog({modal: true, width:'800px'});
-    }
-};
-
-/**
- * Using dat.gui requires a initialization
- */
-function init_datgui() {
-    var gui = new dat.GUI();
-
-    var f1 = gui.addFolder('Init Cluster Parameters');
-    f1.add(config, 'pms_num', 3, 500);
-    f1.add(config, 'vms_num', 10, 800);
-    f1.add(config, 'vmcpu_dist', config.vm_cpumem_dists);
-    f1.add(config, 'vmmem_dist', config.vm_cpumem_dists);
-    f1.open();
-
-    var f2 = gui.addFolder('BBO Parameters');
-    f2.add(config, 'popu_num', 5, 20);
-    f2.add(config, 'muta_num', 5, 20);
-    f2.add(config, 'iter_num', 100, 1000);
-    f2.add(config, 'gene_num', 100, 10000);
-
-    var f3 = gui.addFolder('History Results');
-    f3.add(config, 'data_fn', config.data_fn)
-      .onFinishChange(function(v) {
-        console.log('load data ' + v);
-      });
-
-    gui.add(config, 'init_cluster');
-    gui.add(config, 'about');
-}
-
-/**
- * Display/Close the dashboard of general information
- * @param {float} size Toggle half or full size of dashboard
- */
-function toggle_dashboard(size) {
-    if ($('#dashboard').css('bottom')=='5px') {
-        if (size==1) {
-            $('#dashboard').animate({bottom:'-370px'});
-        } else if (size==0.5) {
-            $('#dashboard').animate({bottom:'-180px'});
-        }
-    } else {
-        $('#dashboard').animate({bottom:'5px'});
-    }
-}
-
-/**
- * Send request to server to get MBBO result data
- */
-function get_mbbo_result() {
-    // get data and update this viz!
-    $.get(
-        'data-mbbo.json',
-        {},
-        function(data) {
-            tmp = data;
-            dataobj = data;
-            // the number of pms and vms are updated when data is loaded
-            pms_num = data.pms_num;
-            vms_num = data.vms_num;
-            update_params();
-
-            draw(data);
-        },'json'
-    );
-}
-
 // start this viz!
 $(document).ready(function(){
     setup();
-    get_mbbo_result();
+    get_mbbo_result(config.get_dfn(config.data_fn));
 });
 
 </script>
