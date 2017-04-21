@@ -8,7 +8,27 @@ import time
 import random
 import math
 import json
+import sys
 #from pyspark import SparkContext
+
+def checkeffective(popu1):
+    '''
+    目标：检查当前population所有chrom的有效性，即vm-hm的拓扑中，hm资源请求量不能超过1.0
+    '''
+    # 将 popu1['p_cost'],popu1['m_cost']清零，并对迁移进化后的popu1['population']，重新统计各HM的资源使用情况（为了确保）
+    for i in range(popu1['size']):
+        for j in range(popu1['num_var']):
+            popu1['p_cost'][i][j] = 0
+            popu1['m_cost'][i][j] = 0
+    for i in range(popu1['size']):
+        for j in range(popu1['num_var']):
+            tmp_position = popu1['population'][i][j]
+            popu1['p_cost'][i][tmp_position] += popu1['rp'][j]
+            popu1['m_cost'][i][tmp_position] += popu1['rm'][j]
+        for x in range(popu1['num_var']):
+            if (popu1['p_cost'][i][x] > 1.0):
+                return False
+    return True
 
 
 def range2rect(size, num_var):
@@ -81,7 +101,7 @@ def mbbode_migration(popu1):
                     index2 = random.randint(0, popu1['size']-1)
                 #实现差分迁移，计算被迁入率选中的chrom中，随机选中的SIV将被差分迁移引入的新SIV值（该位置vm将被重新安排的HM标号）
                 tmp_position = int(popu1['population'][i][j] + popu1['f']*(popu1['population'][i][j] - popu1['population'][index1][j]) + popu1['f']*(popu1['population'][index1][j] - popu1['population'][index2][j] + 0.5)) % popu1['num_var']
-                if (tmp_position < 0):
+                if(tmp_position < 0):
                     tmp_position = -tmp_position
                 while(True):
                     tmp_p_cost = popu1['p_cost'][i][tmp_position] + popu1['rp'][j]
@@ -102,7 +122,11 @@ def mbbode_migration(popu1):
                 popu1['p_cost'][i][j] = 0
             if(popu1['m_cost'][i][j] < 0.000001):
                 popu1['m_cost'][i][j] = 0
-    return popu1
+    if checkeffective(popu1):
+        return popu1
+    else:
+        print "not effective in compute mbbode_migration"
+        sys.exit()
 
 def mbbode_mutation(popu1):
     '''mutate SIVs in a population'''
@@ -124,18 +148,12 @@ def mbbode_mutation(popu1):
                         break
                     else:
                         tmp_position = (tmp_position + 1) % popu1['num_var']
+    if checkeffective(popu1):
+        return popu1
+    else:
+        print "not effective in compute mbbode_mutation"
+        sys.exit()
 
-    # 将 popu1['p_cost'],popu1['m_cost']清零，并依旧迁移进化后的popu1['chrom']，重新计算（为了确保）
-    for i in range(popu1['size']):
-        for j in range(popu1['num_var']):
-            popu1['p_cost'][i][j] = 0
-            popu1['m_cost'][i][j] = 0
-    for i in range(popu1['size']):
-        for j in range(popu1['num_var']):
-            tmp_position = popu1['population'][i][j]
-            popu1['p_cost'][i][tmp_position] += popu1['rp'][j]
-            popu1['m_cost'][i][tmp_position] += popu1['rm'][j]
-    return popu1
 
 def mbbode_cost(popu1):
     '''compute the costs of three objectives in MBBO/DE algorithm'''
@@ -146,6 +164,7 @@ def mbbode_cost(popu1):
             x = popu1['p_cost'][i][j]
             if(x > 0.0):
                 popu1['power_cost'][i] += (446.7 + 5.28*x - 0.04747*x*x + 0.000334*x*x*x)             # 计算size个chrom的能耗值  能耗与cpu使用率紧密关系
+
     # compute the balance cost of popu1
     for i in range(popu1['size']):
         popu1['balance_cost'][i] = 0.0
@@ -153,18 +172,27 @@ def mbbode_cost(popu1):
         average_load_index = 0.0
         for j in range(popu1['num_var']):
             load_index[j] = 1.0 / (1.0005 - popu1['p_cost'][i][j]) / (1.0005 - popu1['m_cost'][i][j])  # 各chrom中每个vm的负载指数
-            average_load_index += load_index[j]                                                      # 各chrom所有vms的总负载指数
-        average_load_index /= 50                 # 此处50有问题，应该是num_var                                                      # 各chrom的平均负载指数
+            average_load_index += load_index[j]                                                        # 各chrom所有vms的总负载指数
+        #average_load_index /= 50                                                                      # 此处50有问题，应该是num_var
+        average_load_index /= popu1['num_var']                                                         # 各chrom的平均负载指数
         for j in range(popu1['num_var']):
             popu1['balance_cost'][i] = popu1['balance_cost'][i] + (load_index[j] - average_load_index)*(load_index[j] - average_load_index)
-        popu1['balance_cost'][i] = math.sqrt(popu1['balance_cost'][i] / 50)          # 此处50有问题，应该是num_var                  # 各chrom的负载均衡代价值
+        #popu1['balance_cost'][i] = math.sqrt(popu1['balance_cost'][i] / 50)                           # 此处50有问题，应该是num_var值
+        popu1['balance_cost'][i] = math.sqrt(popu1['balance_cost'][i] / popu1['num_var'])              # 各chrom的负载均衡代价值
+
     # compute the migration_time of popu1
     for i in range(popu1['size']):
         popu1['migration_time'][i] = 0
         for j in range(popu1['num_var']):
             if(popu1['population'][i][j] != popu1['population0'][i][j]):
                 popu1['migration_time'][i] += popu1['time_base']
-    return popu1
+
+    if checkeffective(popu1):
+        return popu1
+    else:
+        print "not effective in compute mbbode_cost"
+        sys.exit()
+
 
 def mbbode_rank(popu1):
     '''compute each chrom rank of population with non-dominated sorting'''
@@ -172,7 +200,7 @@ def mbbode_rank(popu1):
     for i in range(popu1['size']):
         popu1['rank'][i] = 0
     for i in range(popu1['size']):
-        for j in range(i+1, popu1['size']):                             # 按照非支配解排序non-dominated sorting
+        for j in range(i+1, popu1['size']):                                                            # 按照非支配解排序non-dominated sorting
             if(popu1['power_cost'][i] < popu1['power_cost'][j]):
                 popu1['rank'][j] += 1
             elif(popu1['power_cost'][i] > popu1['power_cost'][j]):
@@ -188,9 +216,9 @@ def mbbode_rank(popu1):
     rank = 999999
     for i in range(popu1['size']):
         if(rank > popu1['rank'][i]):
-            rank = popu1['rank'][i]                                    # 查找最优秀解，rank最小
+            rank = popu1['rank'][i]                                                                    # 查找最优秀解，rank最小
     for i in range(popu1['size']):
-        if(rank == popu1['rank'][i]):                                  # 获取该最优秀解size编号
+        if(rank == popu1['rank'][i]):                                                                  # 获取该最优秀解size编号
             if(popu1['elite_power'] > popu1['power_cost'][i] and popu1['elite_balance'] > popu1['balance_cost'][i]):    # 若上一代精英解没有当前代最优解优秀，则替换之
                 popu1['elite_power'] = popu1['power_cost'][i]
                 popu1['elite_balance'] = popu1['balance_cost'][i]
@@ -198,7 +226,7 @@ def mbbode_rank(popu1):
                 for j in range(popu1['num_var']):
                     popu1['elite_chrom'][j] = popu1['population'][i][j]
             else:
-                for j in range(popu1['num_var']):                       # 若当前代最优解没有精英解优秀，则精英解保留不变并用其替换当代最优解（即下标为0的chrom）
+                for j in range(popu1['num_var']):                                                     # 若当前代最优解没有精英解优秀，则精英解保留不变并用其替换当代最优解（即下标为0的chrom）
                     popu1['population'][0][j] = popu1['elite_chrom'][j]
     return popu1
 
@@ -251,7 +279,7 @@ def createJSON(init_population1,save_chrom,save_cost):
     data['vms'] = vms
 
     # 统计每台pm的cpu,mem被请求量
-    data['pms'] = [0]*len(state)
+    data['pms'] = [[0,0]]*len(state)
     for pm in range(len(state)):
         all_p,all_m = 0,0
         for vm in state[pm]:
@@ -271,7 +299,7 @@ def createJSON(init_population1,save_chrom,save_cost):
     data['HSI_cost'].append(elite_cost)
 
     # 导出为json文件
-    json.dump(data, open('data-mbbo.json','w'))
+    json.dump(data, open('/home/amy/repos/mao-mbbo/viz/data-mbbo.json','w'),indent=2)
     return True
 
 
@@ -316,23 +344,18 @@ def main(generation,size,num_var,p):
     generation，    种群迭代次数
     size，          population中chrom个数
     num_var，       每个chrom中SIV个数
-    p_mutate，      高斯突变率（这里直接给出值没有进行计算）
-    f，             差分因子
-    rp_u，          VM请求CPU的指导变量
-    rm_u，          VM请求MEM的指导变量
     p，             VM对CPU,MEM两种资源请求的相关系数
-    time_base，     计算程序执行时间的基准时间
     '''
     # initail some parameters of the MBBO/DE algorithm
     # generation = 1000
     # size = 10
     # num_var = 200
-    p_mutate = 0.01
-    f = 0.6
-    rp_u = 0.25
-    rm_u = 0.25
+    p_mutate = 0.01                        # 高斯突变率（这里直接给出值没有进行计算）
+    f = 0.6                                # 差分因子
+    rp_u = 0.25                            # VM请求CPU的指导变量
+    rm_u = 0.25                            # VM请求MEM的指导变量
     # p = 1.0
-    time_base = 65
+    time_base = 65                         # 作为单台虚拟机迁移的基准时间
 
     # random create num_var vms with cpu,mem requirements
     rp,rm = initVMResrcs(rp_u,rm_u,p,num_var)
@@ -388,4 +411,4 @@ def main(generation,size,num_var,p):
         print "json file has writen"
 
 if __name__ == '__main__':
-    main(5000,10,200,1.0)
+    main(1000,10,200,1.0)
