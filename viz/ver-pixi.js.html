@@ -38,6 +38,10 @@ html,body { margin:0; padding:0; width:100%; height:100%; overflow-y:hidden; }
 #pmdpanel h3 { font-size:.9em; }
 #pmdpanel p { font-size:.7em; text-indent:.2em; }
 
+#msg { position: absolute; top: 0; left: 40%; width: 20%; text-align: center;
+  background: rgba(0, 0, 0, 0.5); color: white;
+  -moz-border-radius:6px; -webkit-border-radius: 6px; border-radius:6px; }
+
 .pm { position:relative; float:left; margin:3px;
   border:1px dotted #CACACA; width:150px; height:170px; }
 .box { position:relative; top:0; left:0; height:150px;
@@ -120,6 +124,10 @@ html,body { margin:0; padding:0; width:100%; height:100%; overflow-y:hidden; }
   </div>
 </div>
 
+<div id="msg">
+  STATE-FINAL
+</div>
+
 <script type="text/javascript">
 // data object
 var dataobj = null;
@@ -156,6 +164,7 @@ var is_show_plan = false;
 // PIXI.js objects
 var renderer, stage;
 var pms = {}; // physical machines
+var pmas = {}; // physical machine availables
 var vms = {}; // virtual machines
 var mls = {}; // migration lines
 var pmbox = null;
@@ -175,6 +184,9 @@ function add0(num, n) {
     return num;
 }
 
+function msg(m) {
+    $("#msg").html(m);
+}
 
 /**
  * Add a new pm(physical machine) graph graph
@@ -233,14 +245,11 @@ function add_pm(pm_num, pm_cpu, pm_mem, pm_net) {
  * @return {boolean} returns true if vms are added
  */
 function add_vms_to_pm(new_vms, pm_num) {
+    var val, vm_width, vm_height;
     var pmid = 'pm-' + pm_num;
     var pm = pms[pmid];
-
-    var val, vm_width, vm_height;
     var vm_top = pm.y;
     var vm_left = pm.x;
-
-    //console.log("adding vms["+new_vms.length+"] to pm["+pm_num+"]");
 
     for (var i=0;i<new_vms.length;i++) {
         val = new_vms[i];
@@ -268,7 +277,6 @@ function add_vms_to_pm(new_vms, pm_num) {
 
         // add this pm to pms dict
         vms[vmid] = vm;
-
         stage.addChild(vm);
 
         // update the position for next element
@@ -291,6 +299,9 @@ function add_vms_to_pm(new_vms, pm_num) {
     vm_a.x = vm_left;
     vm_a.y = vm_top;
     vm_a.alpha = 0.5;
+
+    // add this vm_a to pmas dict
+    pmas[pmid] = vm_a;
     stage.addChild(vm_a);
 
     return true;
@@ -442,6 +453,7 @@ function mark_move_vm(vm_num, pm_num_from, pm_num_to) {
     vms[vmid]['pm_num_from'] = pm_num_from;
     vms[vmid]['pm_num_to'] = pm_num_to;
     var vm = vms[vmid];
+    vm.lineStyle(1, 0x666666, 1);
     vm.beginFill(0xFF0000);
     vm.drawRect(0, 0, vm.width, vm.height);
     vm.endFill();
@@ -478,7 +490,7 @@ function mark_move_vm(vm_num, pm_num_from, pm_num_to) {
  * Draw according to data
  * @param {object} data The json object
  */
-function draw(data) {
+function draw_pms_vms(data) {
     // TODO hehuan clean the current draw should be done here
 
     // first, create pms
@@ -516,10 +528,7 @@ function draw(data) {
 function gen_simulation_init_data(pms_num, vms_num) {
 }
 
-/**
- * Show
- */
-function show_plan() {
+function plan_init() {
     plan = {
         state0: [],
         state1: [],
@@ -543,12 +552,37 @@ function show_plan() {
         vm.x = pm.x;
         vm.y = pm.y;
     }
-    // Set is_show_plan
-    is_show_plan = true;
+    // Hide Available
+    toggle_pmas();
+    msg("INITED TO STATE-INIT");
 }
 
-function move_delta_vms() {
-    if (!is_show_plan) { return; }
+function toggle_pmas() {
+    for (var i=0; i<pms_num; i++) {
+        var pmid = 'pm-' + i;
+        var pma = pmas[pmid];
+        pma.visible = !pma.visible;
+    }
+}
+
+/**
+ * Change the state of plan
+ */
+function plan_start() {
+    // Set is_show_plan
+    is_show_plan = true;
+    msg("START PLAN SHOW");
+}
+
+/**
+ * Show plan
+ */
+function show_plan() {
+    plan_init();
+    setTimeout("plan_start()", 3000);
+}
+
+function plan_move_vms_by_delta() {
     var isok_all = true;
     for (var i=0; i<plan.state0.length; i++) {
         if (plan.isok[i]) { continue; }
@@ -564,7 +598,11 @@ function move_delta_vms() {
             plan.isok[i] = true;
         }
     }
-    is_show_plan = !isok_all;
+    if (isok_all) {
+        is_show_plan = false;
+        setTimeout("toggle_pmas()", 2000);
+        msg('AT STATE-FINAL');
+    }
 }
 
 /**
@@ -596,8 +634,9 @@ function setup() {
 function game_loop() {
     requestAnimationFrame(game_loop);
     // other animation of updating status here
-    // Move VMS
-    move_delta_vms();
+    // show
+    if (is_show_plan) { plan_move_vms_by_delta(); }
+
 
     renderer.render(stage);
 }
@@ -700,7 +739,7 @@ function get_mbbo_result(data_url) {
             stage.removeChildren();
             // Draw new elements
             update_global_params(data);
-            draw(data);
+            draw_pms_vms(data);
         },'json'
     );
 }
