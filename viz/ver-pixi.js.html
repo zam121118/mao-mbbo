@@ -84,6 +84,7 @@ html,body { margin:0; padding:0; width:100%; height:100%; overflow-y:hidden; }
         <p><i class="fa fa-flash"></i> Reduce P: <b id="hsi-end-power-delta">&nbsp;</b></p>
         <p><i class="fa fa-cogs"></i> Reduce 1: <b id="hsi-end-1-delta">&nbsp;</b></p>
         <p><i class="fa fa-tv"></i> Reduce 2: <b id="hsi-end-2-delta">&nbsp;</b></p>
+        <p><i class="fa fa-cubes"></i> Reduce PM: <b id="hsi-end-pms-num-delta">&nbsp;</b></p>
     </div><!-- .db-panel -->
 
     <div class="db-panel">
@@ -741,17 +742,19 @@ function update_dashboard(data) {
     $('#hsi-start-1').html(data['HSI_cost'][0][1].toFixed(3));
     $('#hsi-start-2').html(data['HSI_cost'][0][2].toFixed(0));
     $('#hsi-start-pms-num').html(data['pms_num']);
+
     // HSI end
     $('#hsi-end-power').html(data['HSI_cost'][1][0].toFixed(3));
     $('#hsi-end-1').html(data['HSI_cost'][1][1].toFixed(3));
     $('#hsi-end-2').html(data['HSI_cost'][1][2].toFixed(0));
     $('#hsi-end-pms-num').html(data['pms_num'] - count_pms_unused(data));
     $('#hsi-end-power-delta').html(
-      _wc((data['HSI_cost'][0][0] - data['HSI_cost'][1][0]).toFixed(3)));
+      _wc((data['HSI_cost'][1][0] - data['HSI_cost'][0][0]).toFixed(3)));
     $('#hsi-end-1-delta').html(
-      _wc((data['HSI_cost'][0][1] - data['HSI_cost'][1][1]).toFixed(3)));
+      _wc((data['HSI_cost'][1][1] - data['HSI_cost'][0][1]).toFixed(3)));
     $('#hsi-end-2-delta').html(
-      _wc((data['HSI_cost'][0][2] - data['HSI_cost'][1][2]).toFixed(0)));
+      _wc((data['HSI_cost'][1][2] - data['HSI_cost'][0][2]).toFixed(0)));
+    $('#hsi-end-pms-num-delta').html(_wc(-count_pms_unused(data)));
     // Experiments
     $('#exp-pms-num').html(_wc(data['pms_num'], 'tomato'));
     $('#exp-vms-num').html(data['vms_num']);
@@ -778,8 +781,8 @@ function update_dashboard(data) {
  */
 function _wc(val, color) {
     if (typeof(color)=="undefined") {
-        return val<0? "<span style='color:#FF0000;'>"+val+"</span>" :
-                      "<span style='color:#00FF00;'>"+val+"</span>";
+        return val<0? "<span style='color:#00FF00;'>"+val+"</span>" :
+                      "<span style='color:#FF0000;'>"+val+"</span>";
     } else {
         return "<span style='color:"+color+";'>"+val+"</span>";
     }
@@ -791,7 +794,7 @@ function _wc(val, color) {
 function count_pms_unused(data) {
     var count = 0;
     for (var i=0; i<data.state.length; i++) {
-        if (data.state[i] == []) {
+        if (data.state[i].length == 0) {
             count ++;
         }
     }
