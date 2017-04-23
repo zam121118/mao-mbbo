@@ -38,6 +38,10 @@ html,body { margin:0; padding:0; width:100%; height:100%; overflow-y:hidden; }
 #pmdpanel h3 { font-size:.9em; }
 #pmdpanel p { font-size:.7em; text-indent:.2em; }
 
+#msg { position: absolute; top: 0; left: 40%; width: 20%; text-align: center;
+  background: rgba(0, 0, 0, 0.5); color: white;
+  -moz-border-radius:6px; -webkit-border-radius: 6px; border-radius:6px; }
+
 .pm { position:relative; float:left; margin:3px;
   border:1px dotted #CACACA; width:150px; height:170px; }
 .box { position:relative; top:0; left:0; height:150px;
@@ -64,39 +68,44 @@ html,body { margin:0; padding:0; width:100%; height:100%; overflow-y:hidden; }
   </div><!-- #db-header -->
   <div id="db-content">
     <div class="db-panel">
-      <h3>Costs List</h3>
-        <p><i class="fa fa-flash"></i> Power: <b>13433</b></p>
-        <p><i class="fa fa-cube"></i> # of PM: <b>200</b></p>
-        <p><i class="fa fa-cubes"></i> # of VM: <b>200</b></p>
-        <p><i class="fa fa-plane"></i> # of Mig.: <b>32</b></p>
+      <h3>HSI Cost Start</h3>
+        <p><i class="fa fa-flash"></i> Power: <b id="hsi-start-power">&nbsp;</b></p>
+        <p><i class="fa fa-cogs"></i> 1: <b id="hsi-start-1">&nbsp;</b></p>
+        <p><i class="fa fa-tv"></i> 2: <b id="hsi-start-2">&nbsp;</b></p>
+        <p><i class="fa fa-cubes"></i> # of PM: <b id="hsi-start-pms-num">&nbsp;</b></p>
+    </div><!-- .db-panel -->
+
+    <div class="db-panel">
+      <h3>HSI Cost End</h3>
+        <p><i class="fa fa-flash"></i> Power: <b id="hsi-end-power">&nbsp;</b></p>
+        <p><i class="fa fa-cogs"></i> 1: <b id="hsi-end-1">&nbsp;</b></p>
+        <p><i class="fa fa-tv"></i> 2: <b id="hsi-end-2">&nbsp;</b></p>
+        <p><i class="fa fa-cubes"></i> # of PM: <b id="hsi-end-pms-num">&nbsp;</b></p>
+        <p><i class="fa fa-flash"></i> Reduce P: <b id="hsi-end-power-delta">&nbsp;</b></p>
+        <p><i class="fa fa-cogs"></i> Reduce 1: <b id="hsi-end-1-delta">&nbsp;</b></p>
+        <p><i class="fa fa-tv"></i> Reduce 2: <b id="hsi-end-2-delta">&nbsp;</b></p>
+        <p><i class="fa fa-cubes"></i> Reduce PM: <b id="hsi-end-pms-num-delta">&nbsp;</b></p>
+    </div><!-- .db-panel -->
+
+    <div class="db-panel">
+      <h3>Experiments</h3>
+      <p><i class="fa fa-cube"></i> # of PM: <b id="exp-pms-num">&nbsp;</b></p>
+      <p><i class="fa fa-cubes"></i> # of VM: <b id="exp-vms-num">&nbsp;</b></p>
+      <p><i class="fa fa-ravelry"></i> # of cores: <b id="exp-vms-cores-num">&nbsp;</b></p>
+      <p><i class="fa fa-microchip"></i> # of mems: <b id="exp-vms-mems-num">&nbsp;</b></p>
+      <p><i class="fa fa-database"></i> # of disk: <b id="exp-vms-disk-sum">&nbsp;</b></p>
+      <p><i class="fa fa-sitemap"></i> # of gen.: <b id="exp-generation-num">&nbsp;</b></p>
+      <p><i class="fa fa-truck"></i> # of MV: <b id="mig-plan-num">&nbsp;</b></p>
     </div><!-- .db-panel -->
 
     <div class="db-panel">
       <h3>Performance</h3>
-      <p><i class="fa fa-clock-o"></i> Sim. ETime: <b>00:21:34</b></p>
-      <p><i class="fa fa-clock-o"></i> Est. MTime: <b>00:00:17</b></p>
+      <p><i class="fa fa-clock-o"></i> Start Time: <b id="perf-time-start">20:10:44</b></p>
+      <p><i class="fa fa-clock-o"></i> End Time: <b id="perf-time-end">21:21:36</b></p>
+      <p><i class="fa fa-clock-o"></i> Sim. Time: <b id="perf-time-sim">00:21:34</b></p>
+      <p><i class="fa fa-clock-o"></i> Mig. Time: <b id="perf-time-mig">00:00:17</b></p>
     </div><!-- .db-panel -->
 
-    <div class="db-panel">
-      <h3>Experiment Scale</h3>
-      <p><i class="fa fa-gavel"></i> # of cores: <b>16</b></p>
-      <p><i class="fa fa-microchip"></i> # of mems: <b>8 GB</b></p>
-      <p><i class="fa fa-database"></i> # of disk: <b>13.2 MB</b></p>
-      <p><i class="fa fa-sitemap"></i> # of gen.: <b>5000</b></p>
-    </div>
-
-    <div class="db-panel">
-      <h3>VM Stat.</h3>
-      <p><i class="fa fa-ravelry"></i> core: <b> 1 - 8 </b></p>
-      <p><i class="fa fa-tv"></i> mems: <b>16MB - 8GB</b></p>
-      <p><i class="fa fa-cogs"></i> I/Os: <b> 1 - 100 M/s</b></p>
-    </div>
-
-    <div class="db-panel">
-      <h3>Migration Stat.</h3>
-      <p><i class="fa fa-adjust"></i> # of ST: <b>24</b></p>
-      <p><i class="fa fa-truck"></i> # of MV: <b>27</b></p>
-    </div>
   </div><!-- #db-content -->
 
 </div><!-- #dashboard -->
@@ -120,17 +129,23 @@ html,body { margin:0; padding:0; width:100%; height:100%; overflow-y:hidden; }
   </div>
 </div>
 
+<div id="msg">
+  STATE-FINAL
+</div>
+
 <script type="text/javascript">
 // data object
 var dataobj = null;
 
-// init pm display arguments
+// init pm display arguments, which will be updated when data loaded
 var pms_num = 200;
 var pm_size = 10;
 var pm_num_x = 10;
 var pm_num_y = 10;
-
 var vms_num = 200;
+
+// store the plan details
+var plan = {};
 
 // colors
 var clr_background = 0x333333;
@@ -145,9 +160,13 @@ var clr_vmbox = 0xA66F00;
 var is_vmdp_shown = false;
 var is_pmdp_shown = false;
 
+// start plan show or not
+var is_show_plan = false;
+
 // PIXI.js objects
 var renderer, stage;
 var pms = {}; // physical machines
+var pmas = {}; // physical machine availables
 var vms = {}; // virtual machines
 var mls = {}; // migration lines
 var pmbox = null;
@@ -167,6 +186,12 @@ function add0(num, n) {
     return num;
 }
 
+/**
+ * Display message on top of window
+ */
+function msg(m) {
+    $("#msg").html(m).fadeIn(500).fadeOut(5000);
+}
 
 /**
  * Add a new pm(physical machine) graph graph
@@ -225,14 +250,11 @@ function add_pm(pm_num, pm_cpu, pm_mem, pm_net) {
  * @return {boolean} returns true if vms are added
  */
 function add_vms_to_pm(new_vms, pm_num) {
+    var val, vm_width, vm_height;
     var pmid = 'pm-' + pm_num;
     var pm = pms[pmid];
-
-    var val, vm_width, vm_height;
     var vm_top = pm.y;
     var vm_left = pm.x;
-
-    //console.log("adding vms["+new_vms.length+"] to pm["+pm_num+"]");
 
     for (var i=0;i<new_vms.length;i++) {
         val = new_vms[i];
@@ -260,7 +282,6 @@ function add_vms_to_pm(new_vms, pm_num) {
 
         // add this pm to pms dict
         vms[vmid] = vm;
-
         stage.addChild(vm);
 
         // update the position for next element
@@ -283,6 +304,9 @@ function add_vms_to_pm(new_vms, pm_num) {
     vm_a.x = vm_left;
     vm_a.y = vm_top;
     vm_a.alpha = 0.5;
+
+    // add this vm_a to pmas dict
+    pmas[pmid] = vm_a;
     stage.addChild(vm_a);
 
     return true;
@@ -434,6 +458,7 @@ function mark_move_vm(vm_num, pm_num_from, pm_num_to) {
     vms[vmid]['pm_num_from'] = pm_num_from;
     vms[vmid]['pm_num_to'] = pm_num_to;
     var vm = vms[vmid];
+    vm.lineStyle(1, 0x666666, 1);
     vm.beginFill(0xFF0000);
     vm.drawRect(0, 0, vm.width, vm.height);
     vm.endFill();
@@ -456,21 +481,17 @@ function mark_move_vm(vm_num, pm_num_from, pm_num_to) {
         pm_to.y + pm_to.height/2
     );
     */
-    //ln.x = vm.x + vm.width/2;
-    //ln.y = vm.y + vm.height/2;
 
     // add this ln to global
     mls[vmid] = ln;
-
     stage.addChild(ln);
 }
-
 
 /**
  * Draw according to data
  * @param {object} data The json object
  */
-function draw(data) {
+function draw_pms_vms(data) {
     // TODO hehuan clean the current draw should be done here
 
     // first, create pms
@@ -508,6 +529,92 @@ function draw(data) {
 function gen_simulation_init_data(pms_num, vms_num) {
 }
 
+/**
+ * Init the plan object with location data of pms and vms
+ */
+function plan_init() {
+    plan = {
+        state0: [],
+        state1: [],
+        delta: [],
+        distance: [],
+        isok: []
+    };
+    for (var i=0; i<dataobj.plan.length; i++) {
+        var pm_num = dataobj.plan[i][0];
+        var pmid = 'pm-' + pm_num;
+        var vmid = 'vm-' + i;
+        var pm = pms[pmid];
+        var vm = vms[vmid];
+        // Get state0 and state1
+        plan.state0.push([pm.x, pm.y]);
+        plan.state1.push([vm.x, vm.y]);
+        // Calcuate the distance and delta
+        plan.distance.push([vm.x - pm.x, vm.y - pm.y]);
+        plan.delta.push([(vm.x - pm.x)/1000, (vm.y - pm.y)/1000]);
+        plan.isok.push(false);
+        vm.x = pm.x;
+        vm.y = pm.y;
+    }
+    // Hide Available
+    toggle_pmas();
+    msg("INITED TO STATE-INIT");
+}
+
+/**
+ * Toggle display of pmas
+ */
+function toggle_pmas() {
+    for (var i=0; i<pms_num; i++) {
+        var pmid = 'pm-' + i;
+        var pma = pmas[pmid];
+        pma.visible = !pma.visible;
+    }
+}
+
+/**
+ * Change the state of plan
+ */
+function plan_start() {
+    // Set is_show_plan
+    is_show_plan = true;
+    msg("START PLAN SHOW");
+}
+
+/**
+ * Show plan
+ */
+function show_plan() {
+    plan_init();
+    setTimeout("plan_start()", 3000);
+}
+
+/**
+ * Move vms in plan delta distance
+ * This is the key to the animation of migration
+ */
+function plan_move_vms_by_delta() {
+    var isok_all = true;
+    for (var i=0; i<plan.state0.length; i++) {
+        if (plan.isok[i]) { continue; }
+        isok_all = false;
+        var vmid = 'vm-' + i;
+        var vm = vms[vmid];
+        vm.x += plan.delta[i][0];
+        vm.y += plan.delta[i][1];
+        plan.distance[i][0] -= plan.delta[i][0];
+        plan.distance[i][1] -= plan.delta[i][1];
+        if (Math.abs(plan.distance[i][0])<0.01 &&
+            Math.abs(plan.distance[i][1])<0.01) {
+            plan.isok[i] = true;
+        }
+    }
+    if (isok_all) {
+        is_show_plan = false;
+        setTimeout("toggle_pmas()", 2000);
+        msg('AT STATE-FINAL');
+    }
+}
 
 /**
  * Create the scene
@@ -537,11 +644,11 @@ function setup() {
  */
 function game_loop() {
     requestAnimationFrame(game_loop);
-    // other animation of updating status here:
+    // other animation of updating status here
+    if (is_show_plan) { plan_move_vms_by_delta(); }
 
     renderer.render(stage);
 }
-
 
 /**
  * Configs and dashboard functions
@@ -567,6 +674,9 @@ var config = {
     },
     tour_vms: function() {
         console.log('tour is NOT developed yet');
+    },
+    show_plan: function() {
+        show_plan();
     },
     about: function() {
         console.log('showing about...');
@@ -601,6 +711,7 @@ function init_datgui() {
 
     f3.add(config, 'load_data');
     gui.add(config, 'about');
+    gui.add(config, 'show_plan');
 }
 
 /**
@@ -622,25 +733,87 @@ function toggle_dashboard(size) {
 }
 
 /**
- * Send request to server to get MBBO result data
+ * Update dashboard data
  */
-function get_mbbo_result(data_url) {
-    // get data and update this viz!
-    $.get(
-        data_url,
-        {},
-        function(data) {
-            // Use this data to update PM/VM detail panel
-            dataobj = data;
-            // Clear all objects on stage
-            stage.removeChildren();
-            // Draw new elements
-            update_global_params(data);
-            draw(data);
-        },'json'
-    );
+function update_dashboard(data) {
+    // HSI Start
+    $('#hsi-start-power').html(
+      _wc(data['HSI_cost'][0][0].toFixed(3), 'deepskyblue'));
+    $('#hsi-start-1').html(data['HSI_cost'][0][1].toFixed(3));
+    $('#hsi-start-2').html(data['HSI_cost'][0][2].toFixed(0));
+    $('#hsi-start-pms-num').html(data['pms_num']);
+
+    // HSI end
+    $('#hsi-end-power').html(data['HSI_cost'][1][0].toFixed(3));
+    $('#hsi-end-1').html(data['HSI_cost'][1][1].toFixed(3));
+    $('#hsi-end-2').html(data['HSI_cost'][1][2].toFixed(0));
+    $('#hsi-end-pms-num').html(data['pms_num'] - count_pms_unused(data));
+    $('#hsi-end-power-delta').html(
+      _wc((data['HSI_cost'][1][0] - data['HSI_cost'][0][0]).toFixed(3)));
+    $('#hsi-end-1-delta').html(
+      _wc((data['HSI_cost'][1][1] - data['HSI_cost'][0][1]).toFixed(3)));
+    $('#hsi-end-2-delta').html(
+      _wc((data['HSI_cost'][1][2] - data['HSI_cost'][0][2]).toFixed(0)));
+    $('#hsi-end-pms-num-delta').html(_wc(-count_pms_unused(data)));
+    // Experiments
+    $('#exp-pms-num').html(_wc(data['pms_num'], 'tomato'));
+    $('#exp-vms-num').html(data['vms_num']);
+    $('#exp-vms-cores-num').html(count_vms_usage(data)[0].toFixed(4));
+    $('#exp-vms-mems-num').html(count_vms_usage(data)[1].toFixed(4));
+    $('#exp-vms-disk-sum').html(
+      _wc((data['vms_num']*count_vms_usage(data)[1]).toFixed(4), 'violet'));
+    $('#exp-generation-num').html(data['vms_num']*data['pms_num']);
+    $('#mig-plan-num').html(data['plan'].length);
+    // Performance
+    $('#perf-time-start').html();
+    $('#perf-time-end').html();
+    $('#perf-time-sim').html();
+    $('#perf-time-mig').html();
 }
 
+/**
+ * Wrap color style to a value
+ * @param {Number} val Any number
+ * @param {String} color Any color string or HEX
+ *        for example:
+ *        * color string: red palevioletred indigo saddlebrown sienna darkkhaki
+ *        * HEX value: #FF0000 #B8860B #F4A460 #9370DB #D87093
+ */
+function _wc(val, color) {
+    if (typeof(color)=="undefined") {
+        return val<0? "<span style='color:#00FF00;'>"+val+"</span>" :
+                      "<span style='color:#FF0000;'>"+val+"</span>";
+    } else {
+        return "<span style='color:"+color+";'>"+val+"</span>";
+    }
+}
+
+/**
+ * Calculate how many pms are not used
+ */
+function count_pms_unused(data) {
+    var count = 0;
+    for (var i=0; i<data.state.length; i++) {
+        if (data.state[i].length == 0) {
+            count ++;
+        }
+    }
+    return count;
+}
+
+/**
+ * Calculate total usage of vms
+ */
+function count_vms_usage(data) {
+    var count_cpu = 0;
+    var count_mem = 0;
+
+    for (var i=0; i<data.vms.length; i++) {
+        count_cpu += data.vms[i][0];
+        count_mem += data.vms[i][1];
+    }
+    return [count_cpu, count_mem];
+}
 /**
  * Change the size of PM and number according to screen size
  */
@@ -687,6 +860,27 @@ function calc_pm_width(pms_num) {
     } else {
         return 10;
     }
+}
+
+/**
+ * Send request to server to get MBBO result data
+ */
+function get_mbbo_result(data_url) {
+    // get data and update this viz!
+    $.get(
+        data_url,
+        {},
+        function(data) {
+            // Use this data to update PM/VM detail panel
+            dataobj = data;
+            // Clear all objects on stage
+            stage.removeChildren();
+            // Draw new elements
+            update_global_params(data);
+            draw_pms_vms(data);
+            update_dashboard(data);
+        },'json'
+    );
 }
 
 // start this viz!
