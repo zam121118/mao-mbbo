@@ -250,7 +250,7 @@ def get_best_cost(popu1, popu2):
         best_cost[2] = popu1['elite_migration_time']
     return best_cost
 
-def createJSON(init_population1,save_chrom,save_cost,HSI_history):
+def createJSON(init_population1,save_chrom,save_cost,HSI_history,generation):
     '''
     目标：构造json文件，记录MBBO算法中的中间/最终结果保存
     参数：
@@ -322,7 +322,7 @@ def createJSON(init_population1,save_chrom,save_cost,HSI_history):
     data['HSI_cost'].append(elite_cost)
 
     # 导出为json文件
-    json.dump(data, open('/home/amy/repos/mao-mbbo/viz/data-mbbo.json','w'),indent=2)
+    json.dump(data, open('../viz/data-mbbo-{g}.json'.format(g=generation),'w'),indent=2)
     return True
 
 
@@ -434,8 +434,8 @@ def main(generation,size,num_var,p):
     print 'the init chrom maybe is %s, use %s pms' %(save_chrom,len(set(save_chrom)))
     print 'after mbbo, chrom maybe is %s, use %s pms' %(init_population[0]['elite_chrom'],len(set(init_population[0]['elite_chrom'])))
     #sc.stop()
-    if (createJSON(init_population[0],save_chrom,save_cost,HSI_history)):
+    if (createJSON(init_population[0],save_chrom,save_cost,HSI_history,generation)):
         print "json file has writen"
 
 if __name__ == '__main__':
-    main(1000,10,200,1.0)
+    main(10000,10,200,1.0)

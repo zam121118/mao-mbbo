@@ -7,6 +7,8 @@
 <script type="text/javascript" src="./static/lib/jqueryui/humanlity/jquery-ui.js"></script>
 <script type="text/javascript" src="./static/lib/dat.gui/dat.gui.js"></script>
 <script type="text/javascript" src="./static/lib/pixi.js/v4.4.4/pixi.min.js"></script>
+<script type="text/javascript" src="./static/lib/echarts/3.5.3/echarts.min.js"></script>
+<script type="text/javascript" src="./static/lib/echarts/3.5.3/theme-dark.js"></script>
 <link rel="stylesheet" href="./static/lib/jqueryui/humanlity/jquery-ui.css">
 <link rel="stylesheet" href="./static/lib/font-awesome/4.7.0/css/font-awesome.css">
 <style>
@@ -14,7 +16,7 @@ html,body { margin:0; padding:0; width:100%; height:100%; overflow-y:hidden; }
 
 #main { width:100%; height:100%; overflow-y:none; background:#333333;}
 #dashboard { width:80%; height:400px; position:absolute; left:10%;
-  bottom:-180px; background:rgba(0, 0, 0, 0.75); border: 5px solid black; }
+  bottom: 5px; background:rgba(0, 0, 0, 0.75); border: 5px solid black; }
 #dashboard h2, #dashboard h3, #dashboard h4, #dashboard p, #dashboard a { color: white; padding:0; margin:0; }
 #dashboard #db-header a:hover { color:black; background:white; }
 #dashboard h2 { font-size:1em; border-bottom: 1px dotted #666666; line-height:1.5em; }
@@ -23,6 +25,12 @@ html,body { margin:0; padding:0; width:100%; height:100%; overflow-y:hidden; }
 #dashboard a { text-decoration:none; }
 #dashboard .db-panel { margin:5px 0 0 5px; width:180px; height:170px;
   float:left; display:block; background:rgba(0,0,0,0.5); padding:5px; }
+#dashboard .db-panel4 { margin:5px 0 0 5px; width:765px; height:170px;
+  float:left; display:block; background:rgba(0,0,0,0.5); padding:5px; }
+#dashboard #chart-hsi-history { width: 100%; height: 170px; }
+#dashboard .db-unmoved-vm { padding: 3px; color: #CACACA; margin: 0 0 0 2px; }
+#dashboard .db-unmoved-vm:hover { background: deepskyblue; color: white;
+  font-weight: bold; }
 
 #vmdpanel { position:absolute; top:0; left:0; padding:5px; width:160px;
   height:160px; background:rgba(0,0,0,0.75); border:2px solid #000000;
@@ -70,16 +78,16 @@ html,body { margin:0; padding:0; width:100%; height:100%; overflow-y:hidden; }
     <div class="db-panel">
       <h3>HSI Cost Start</h3>
         <p><i class="fa fa-flash"></i> Power: <b id="hsi-start-power">&nbsp;</b></p>
-        <p><i class="fa fa-cogs"></i> 1: <b id="hsi-start-1">&nbsp;</b></p>
-        <p><i class="fa fa-tv"></i> 2: <b id="hsi-start-2">&nbsp;</b></p>
+        <p><i class="fa fa-cogs"></i> Load Index: <b id="hsi-start-1">&nbsp;</b></p>
+        <p><i class="fa fa-tv"></i> Mig. Time: <b id="hsi-start-2">&nbsp;</b></p>
         <p><i class="fa fa-cubes"></i> # of PM: <b id="hsi-start-pms-num">&nbsp;</b></p>
     </div><!-- .db-panel -->
 
     <div class="db-panel">
       <h3>HSI Cost End</h3>
         <p><i class="fa fa-flash"></i> Power: <b id="hsi-end-power">&nbsp;</b></p>
-        <p><i class="fa fa-cogs"></i> 1: <b id="hsi-end-1">&nbsp;</b></p>
-        <p><i class="fa fa-tv"></i> 2: <b id="hsi-end-2">&nbsp;</b></p>
+        <p><i class="fa fa-cogs"></i> Load Index: <b id="hsi-end-1">&nbsp;</b></p>
+        <p><i class="fa fa-tv"></i> Mig. Time: <b id="hsi-end-2">&nbsp;</b></p>
         <p><i class="fa fa-cubes"></i> # of PM: <b id="hsi-end-pms-num">&nbsp;</b></p>
         <p><i class="fa fa-flash"></i> Reduce P: <b id="hsi-end-power-delta">&nbsp;</b></p>
         <p><i class="fa fa-cogs"></i> Reduce 1: <b id="hsi-end-1-delta">&nbsp;</b></p>
@@ -91,7 +99,7 @@ html,body { margin:0; padding:0; width:100%; height:100%; overflow-y:hidden; }
       <h3>Experiments</h3>
       <p><i class="fa fa-cube"></i> # of PM: <b id="exp-pms-num">&nbsp;</b></p>
       <p><i class="fa fa-cubes"></i> # of VM: <b id="exp-vms-num">&nbsp;</b></p>
-      <p><i class="fa fa-ravelry"></i> # of cores: <b id="exp-vms-cores-num">&nbsp;</b></p>
+      <p><i class="fa fa-ravelry"></i> # of CPUs: <b id="exp-vms-cores-num">&nbsp;</b></p>
       <p><i class="fa fa-microchip"></i> # of mems: <b id="exp-vms-mems-num">&nbsp;</b></p>
       <p><i class="fa fa-database"></i> # of disk: <b id="exp-vms-disk-sum">&nbsp;</b></p>
       <p><i class="fa fa-sitemap"></i> # of gen.: <b id="exp-generation-num">&nbsp;</b></p>
@@ -105,6 +113,15 @@ html,body { margin:0; padding:0; width:100%; height:100%; overflow-y:hidden; }
       <p><i class="fa fa-clock-o"></i> Sim. Time: <b id="perf-time-sim">00:21:34</b></p>
       <p><i class="fa fa-clock-o"></i> Mig. Time: <b id="perf-time-mig">00:00:17</b></p>
     </div><!-- .db-panel -->
+
+    <div class="db-panel">
+      <h3>Unmoved VMS</h3>
+      <p id="list-unmoved-vms">&nbsp;</p>
+    </div>
+
+    <div class="db-panel4">
+      <div id="chart-hsi-history"></div>
+    </div>
 
   </div><!-- #db-content -->
 
@@ -380,13 +397,20 @@ function on_out_vm() {
 function show_pm_detail(pmid) {
     var pm = pms[pmid];
     var pm_num = parseInt(pmid.split('-')[1]);
-    var pm_data = dataobj.pms[pm_num];
-    var pm_state = dataobj.state[pm_num];
+    var pm_data0 = dataobj.state0.pms_used[pm_num];
+    var pm_data1 = dataobj.state1.pms_used[pm_num];
+    var pm_state0 = dataobj.state0.vms_place[pm_num];
+    var pm_state1 = dataobj.state1.vms_place[pm_num];
+
     $('#pmdp-content').html(
         "<p>#: <b>"+pmid+"</b></p>" +
-        "<p>U.CPU: <b>"+pm_data[0].toFixed(4)+"</b></p>" +
-        "<p>U.MEM: <b>"+pm_data[1].toFixed(4)+"</b></p>" +
-        "<p>VMS: "+pm_state
+        "<p>S0.CPU: <b>"+pm_data0[0].toFixed(4)+"</b></p>" +
+        "<p>S0.MEM: <b>"+pm_data0[1].toFixed(4)+"</b></p>" +
+        "<p>S0.VMS: "+pm_state0+"</p>" +
+        "<p>&nbsp;</p>" +
+        "<p>S1.CPU: <b>"+pm_data1[0].toFixed(4)+"</b></p>" +
+        "<p>S1.MEM: <b>"+pm_data1[1].toFixed(4)+"</b></p>" +
+        "<p>S1.VMS: "+pm_state1+"</p>"
     );
     // calc the position of this panel
     // when near the bottom or right edge, reset the value
@@ -453,6 +477,9 @@ function close_vm_detail(vmid) {
  * @param {int} pm_to The number of pm which the vm is about to put
  */
 function mark_move_vm(vm_num, pm_num_from, pm_num_to) {
+    if (pm_num_from == pm_num_to) {
+        return;
+    }
     //console.log("draw vm "+pm_num_from+" -> " + pm_num_to);
     var vmid = 'vm-' + vm_num;
     vms[vmid]['pm_num_from'] = pm_num_from;
@@ -491,24 +518,27 @@ function mark_move_vm(vm_num, pm_num_from, pm_num_to) {
  * Draw according to data
  * @param {object} data The json object
  */
-function draw_pms_vms(data) {
+function draw_pms_vms(data, state) {
     // TODO hehuan clean the current draw should be done here
-
+    state = 'state1';
     // first, create pms
     for (var i=0;i<data.pms_num;i++) {
-        add_pm(i, data.pms[i][0], data.pms[i][1], data.pms[i][2]);
+        add_pm(i,
+          data[state].pms_used[i][0],
+          data[state].pms_used[i][1],
+          data[state].pms_used[i][2]);
     }
 
     // second, add vms to pms
-    for (var i=0;i<data.state.length;i++) {
+    for (var i=0;i<data[state].vms_place.length;i++) {
         // construct an array for drawing
         // `i` is pm_num
         var vms = [];
-        for (var j=0;j<data.state[i].length;j++) {
+        for (var j=0;j<data[state].vms_place[i].length;j++) {
             vms.push([
-                data.state[i][j],
-                data.vms[data.state[i][j]][0],
-                data.vms[data.state[i][j]][1]
+                data[state].vms_place[i][j],
+                data.vms[data[state].vms_place[i][j]][0],
+                data.vms[data[state].vms_place[i][j]][1]
             ]);
         }
         add_vms_to_pm(vms, i);
@@ -695,7 +725,6 @@ function init_datgui() {
     f1.add(config, 'vms_num', 10, 800);
     f1.add(config, 'vmcpu_dist', config.vm_cpumem_dists);
     f1.add(config, 'vmmem_dist', config.vm_cpumem_dists);
-    f1.open();
 
     var f2 = gui.addFolder('BBO Parameters');
     f2.add(config, 'popu_num', 5, 20);
@@ -708,8 +737,9 @@ function init_datgui() {
       .onFinishChange(function(v) {
         config.load_data();
       });
-
     f3.add(config, 'load_data');
+    f3.open();
+
     gui.add(config, 'about');
     gui.add(config, 'show_plan');
 }
@@ -741,34 +771,41 @@ function update_dashboard(data) {
       _wc(data['HSI_cost'][0][0].toFixed(3), 'deepskyblue'));
     $('#hsi-start-1').html(data['HSI_cost'][0][1].toFixed(3));
     $('#hsi-start-2').html(data['HSI_cost'][0][2].toFixed(0));
-    $('#hsi-start-pms-num').html(data['pms_num']);
+    $('#hsi-start-pms-num').html(data['pms_num'] - count_pms_unused(data, 'state0'));
 
     // HSI end
     $('#hsi-end-power').html(data['HSI_cost'][1][0].toFixed(3));
     $('#hsi-end-1').html(data['HSI_cost'][1][1].toFixed(3));
     $('#hsi-end-2').html(data['HSI_cost'][1][2].toFixed(0));
-    $('#hsi-end-pms-num').html(data['pms_num'] - count_pms_unused(data));
+    $('#hsi-end-pms-num').html(data['pms_num'] - count_pms_unused(data, 'state1'));
     $('#hsi-end-power-delta').html(
       _wc((data['HSI_cost'][1][0] - data['HSI_cost'][0][0]).toFixed(3)));
     $('#hsi-end-1-delta').html(
       _wc((data['HSI_cost'][1][1] - data['HSI_cost'][0][1]).toFixed(3)));
     $('#hsi-end-2-delta').html(
       _wc((data['HSI_cost'][1][2] - data['HSI_cost'][0][2]).toFixed(0)));
-    $('#hsi-end-pms-num-delta').html(_wc(-count_pms_unused(data)));
+    $('#hsi-end-pms-num-delta').html(_wc(count_pms_unused(data, 'state0')
+                                       - count_pms_unused(data, 'state1')));
     // Experiments
     $('#exp-pms-num').html(_wc(data['pms_num'], 'tomato'));
     $('#exp-vms-num').html(data['vms_num']);
     $('#exp-vms-cores-num').html(count_vms_usage(data)[0].toFixed(4));
     $('#exp-vms-mems-num').html(count_vms_usage(data)[1].toFixed(4));
     $('#exp-vms-disk-sum').html(
-      _wc((data['vms_num']*count_vms_usage(data)[1]).toFixed(4), 'violet'));
+      _wc((count_vms_area(data)).toFixed(4), 'violet'));
     $('#exp-generation-num').html(data['vms_num']*data['pms_num']);
-    $('#mig-plan-num').html(data['plan'].length);
+    $('#mig-plan-num').html(_wc(count_plan_move(data), 'sienna'));
     // Performance
     $('#perf-time-start').html();
     $('#perf-time-end').html();
     $('#perf-time-sim').html();
     $('#perf-time-mig').html();
+
+    // Unmoved vms
+    update_unmoved_vms(data);
+
+    // Chart
+    draw_hsi_history(data);
 }
 
 /**
@@ -791,10 +828,10 @@ function _wc(val, color) {
 /**
  * Calculate how many pms are not used
  */
-function count_pms_unused(data) {
+function count_pms_unused(data, state) {
     var count = 0;
-    for (var i=0; i<data.state.length; i++) {
-        if (data.state[i].length == 0) {
+    for (var i=0; i<data[state].vms_place.length; i++) {
+        if (data[state].vms_place[i].length == 0) {
             count ++;
         }
     }
@@ -813,6 +850,32 @@ function count_vms_usage(data) {
         count_mem += data.vms[i][1];
     }
     return [count_cpu, count_mem];
+}
+
+/**
+ *
+ */
+function count_plan_move(data) {
+    var count = 0;
+    for (var i=0; i<data.plan.length; i++) {
+        if (data.plan[i][0] == data.plan[i][1]) {
+
+        } else {
+            count += 1;
+        }
+    }
+    return count;
+}
+
+/**
+ * Calculate the area of vms
+ */
+function count_vms_area(data) {
+  var area = 0;
+  for (var i=0; i<data.vms.length; i++) {
+      area += data.vms[i][0] * data.vms[i][1];
+  }
+  return area;
 }
 /**
  * Change the size of PM and number according to screen size
@@ -862,6 +925,122 @@ function calc_pm_width(pms_num) {
     }
 }
 
+/*
+ *
+ */
+function update_unmoved_vms(data) {
+    var list = [];
+    for (var i=0; i<data.plan.length; i++) {
+        if (data.plan[i][0]==data.plan[i][1]) {
+            var html = "<a href='javascript:;' class='db-unmoved-vm'>"+i+"</a>";
+            list.push(html);
+        }
+    }
+    $('#list-unmoved-vms').html(list.join(''));
+
+    $('.db-unmoved-vm').mouseover(function(){
+        var vm_num = parseInt($(this).html());
+        var pm_num = dataobj.plan[vm_num][0];
+        var pmid = 'pm-' + pm_num;
+        show_pm_detail(pmid);
+    }).mouseout(function(){
+        var vm_num = parseInt($(this).html());
+        var pm_num = dataobj.plan[vm_num][0];
+        var pmid = 'pm-' + pm_num;
+        close_pm_detail(pmid);
+    });
+}
+
+/**
+ *
+ */
+
+function draw_hsi_history(data) {
+    var y1 = [], y2 = [], y3 = [];
+    for (var i=0; i<data.HSI_history.values.length; i++) {
+        y1.push(data.HSI_history.values[i][0]);
+        y2.push(data.HSI_history.values[i][1]);
+        y3.push(data.HSI_history.values[i][2]);
+    }
+    var option = {
+      grid: {
+          left: 70,
+          top: 5,
+          right: 160,
+          bottom: 20,
+          show: false
+      },
+      tooltip: {
+          trigger: 'axis',
+          axisPointer: {
+              type: 'cross'
+          }
+      },
+      legend: {
+          data:['Power', 'Load Index', "Mig Time" ]
+      },
+      xAxis: [
+       {
+               type: 'category',
+               axisTick: {
+                   alignWithLabel: true
+               },
+               axisLabel: {
+                   formatter: function(v) { return v.toFixed(1) + ' s'; }
+               },
+               data: data.HSI_history.ts
+           }
+       ],
+       yAxis: [{
+           type: 'value',
+           name: 'Power',
+           min: 45000,
+           max: 60000,
+           position: 'left',
+           axisLabel: {
+               formatter: function(v) { return (v/1000).toFixed(1) + ' kW/h'; }
+           }
+       },{
+           type: 'value',
+           name: 'Load Index',
+           min: 5,
+           max: 20,
+           position: 'right',
+           axisLabel: {
+               formatter: function(v) { return v.toFixed(3); }
+           }
+       },{
+           type: 'value',
+           name: 'Mig Time',
+           min: 10000,
+           max: 14000,
+           position: 'right',
+           offset: 80,
+           axisLabel: {
+               formatter: function(v) { return (v/60).toFixed(1) + ' m'; }
+           }
+       }],
+       series: [{
+            name: 'Power',
+            type: 'bar',
+            yAxisIndex:0,
+            data: y1
+       },{
+           name: 'Load Index',
+           type: 'line',
+           yAxisIndex:1,
+           data: y2
+       },{
+            name: 'Mig Time',
+            type: 'line',
+            yAxisIndex:2,
+            data: y3
+        }]
+    };
+    var myChart = echarts.init(document.getElementById('chart-hsi-history'), 'dark');
+    myChart.setOption(option);
+}
+
 /**
  * Send request to server to get MBBO result data
  */
@@ -875,6 +1054,8 @@ function get_mbbo_result(data_url) {
             dataobj = data;
             // Clear all objects on stage
             stage.removeChildren();
+            // msg
+            msg("Data Loaded!");
             // Draw new elements
             update_global_params(data);
             draw_pms_vms(data);
