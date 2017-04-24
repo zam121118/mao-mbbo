@@ -173,7 +173,7 @@ def mbbode_cost(popu1):
         for j in range(popu1['num_var']):
             load_index[j] = 1.0 / (1.0005 - popu1['p_cost'][i][j]) / (1.0005 - popu1['m_cost'][i][j])  # 各chrom中每个vm的负载指数
             average_load_index += load_index[j]                                                        # 各chrom所有vms的总负载指数
-        #average_load_index /= 50                                                                      # 此处50有问题，应该是num_var
+        #average_load_index /= 50                                                                      # 此处50有问题，应该是实际承受负载的hm个数
         average_load_index /= popu1['num_var']                                                         # 各chrom的平均负载指数
         for j in range(popu1['num_var']):
             popu1['balance_cost'][i] = popu1['balance_cost'][i] + (load_index[j] - average_load_index)*(load_index[j] - average_load_index)
@@ -197,7 +197,7 @@ def mbbode_cost(popu1):
                 # 剔除无效迁移
                 for x in range(j+1,popu1['num_var']):
                     if (popu1['rp'][j] == popu1['rp'][x] and popu1['rm'][j] == popu1['rm'][x]):  # 若有2个虚拟机尺寸cpu,mem一样
-                        print j,x
+                        # print 'i have enter the x loop and find one equal',j
                         if (popu1['population0'][i][j] == popu1['population'][i][x]):            # vm_x将迁入的目标hm是vm_j的源hm,则直接将vm_x的目标hm改为vm_j的目标hm，vm_j不用进行迁移
                             popu1['population'][i][x] = popu1['population'][i][j]
                             popu1['population'][i][j] = popu1['population0'][i][j]
@@ -206,6 +206,7 @@ def mbbode_cost(popu1):
                             popu1['population'][i][j] = popu1['population'][i][x]
                             popu1['population'][i][x] = popu1['population0'][i][x]
                             popu1['migration_time'][i] -= popu1['time_base']                     # 节省1次迁移用时
+                    # print "don't find invalid migration\n"
 
 
 
@@ -396,7 +397,7 @@ def main(generation,size,num_var,p):
     # generation = 1000
     # size = 10
     # num_var = 200
-    p_mutate = 0.02                        # 高斯突变率（这里直接给出值没有进行计算）
+    p_mutate = 0.02                        # 高斯突变率（这里直接给出值没有进行计算）0.01
     f = 0.6                                # 差分因子
     rp_u = 0.25                            # VM请求CPU的指导变量
     rm_u = 0.25                            # VM请求MEM的指导变量
@@ -467,4 +468,4 @@ def main(generation,size,num_var,p):
         print "json file has writen"
 
 if __name__ == '__main__':
-    main(500000,10,200,1.0)
+    main(1000,10,200,1.0)
