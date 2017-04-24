@@ -94,4 +94,4 @@ Generations | Computing Time| begin-end used pms | 3 begining HSIs| 3 ending HSI
 
 The visualization powered by pixi.js:
 
-![pixi.js version](https://github.com/zam121118/mao-mbbo/blob/hh-dev/viz/static/img/demo.png?raw=true)
+![pixi.js version](https://github.com/zam121118/mao-mbbo/blob/master/viz/static/img/demo.png?raw=true)
