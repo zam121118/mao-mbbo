@@ -250,7 +250,7 @@ def get_best_cost(popu1, popu2):
         best_cost[2] = popu1['elite_migration_time']
     return best_cost
 
-def createJSON(init_population1,save_chrom,save_cost,HSI_history,generation):
+def createJSON(init_population1,save_chrom,save_cost,HSI_history,performance):
     '''
     目标：构造json文件，记录MBBO算法中的中间/最终结果保存
     参数：
@@ -268,7 +268,8 @@ def createJSON(init_population1,save_chrom,save_cost,HSI_history,generation):
         'state0':{'pms_used':[],'vms_place':[]}, \
         'plan':[], \
         'HSI_cost':[], \
-        'HSI_history': HSI_history}
+        'HSI_history': HSI_history, \
+        'performance': performance}
 
     # 统计每台pm上拥有的vm编号
     vms_place = [ [] for i in range(init_population1['num_var'])] # num_var个pms
@@ -322,7 +323,7 @@ def createJSON(init_population1,save_chrom,save_cost,HSI_history,generation):
     data['HSI_cost'].append(elite_cost)
 
     # 导出为json文件
-    json.dump(data, open('../viz/data-mbbo-{g}.json'.format(g=generation),'w'),indent=2)
+    json.dump(data, open('../viz/data-mbbo-{g}.json'.format(g=data['performance'][0]),'w'),indent=2)
     return True
 
 
@@ -402,9 +403,10 @@ def main(generation,size,num_var,p):
     HSI_values = []
     HSI_ts = []
     save_elite_cost = [0,0,0]
-    time1 = time.time()
+    time1 = time.time()                                                # 算法迭代进化开始时间戳
+
     for g in range(generation):                                        # 设置最大迭代次数
-        #pop = sc.parallelize(init_population)                          #parallelize()：Distribute a local Python collection to form an RDD
+        #pop = sc.parallelize(init_population)                         #parallelize()：Distribute a local Python collection to form an RDD
         #init_population = pop.map(mbbode_migration).map(mbbode_mutation).map(mbbode_cost).map(mbbode_rank).collect()  #RDD.map():Return a new RDD by applying a function to each element of this RDD
         init_population[0] = mbbode_migration(init_population[0])
         init_population[0] = mbbode_mutation(init_population[0])
@@ -412,8 +414,8 @@ def main(generation,size,num_var,p):
         init_population[0] = mbbode_rank(init_population[0])
 
 
-        tmp = random.randint(0,size-1)  # 从每个群岛的population中size个随机选出第tmp各解
-        save_chrom = init_population[0]['population'][tmp]   # 随机挑选的第tmp个初始候选解，代表MBBO执行前vm-hm拓扑关系
+        tmp = random.randint(0,size-1)                                 # 从每个群岛的population中size个随机选出第tmp各解
+        save_chrom = init_population[0]['population'][tmp]             # 随机挑选的第tmp个初始候选解，代表MBBO执行前vm-hm拓扑关系
         save_cost = (init_population[0]['power_cost'][tmp],init_population[0]['balance_cost'][tmp],init_population[0]['migration_time'][tmp]) # 第tmp个初始候选解的3个HSI代价值
 
 
@@ -428,13 +430,18 @@ def main(generation,size,num_var,p):
             HSI_values.append(save_elite_cost)
             HSI_ts.append(time.time() - time1)
 
-    HSI_history = {'values': HSI_values, 'ts': HSI_ts}
+    HSI_history = {'values': HSI_values, 'ts': HSI_ts}                  # HSI_values，HSI_ts分别保存每次迭代变化后的3个HSI cost值及该次迭代时间用于绘图
     time2 = time.time()
+    time_sim = time2 - time1                                                # 算法迭代进化结束时间戳
     print 'Time cost: ', (time2 - time1), '\n'
+    time1 = time.strftime('%H:%M:%S',time.localtime(time1))
+    time2 = time.strftime('%H:%M:%S',time.localtime(time2))
+    print time1,time2
     print 'the init chrom maybe is %s, use %s pms' %(save_chrom,len(set(save_chrom)))
     print 'after mbbo, chrom maybe is %s, use %s pms' %(init_population[0]['elite_chrom'],len(set(init_population[0]['elite_chrom'])))
     #sc.stop()
-    if (createJSON(init_population[0],save_chrom,save_cost,HSI_history,generation)):
+    performance = [generation,time1,time2,time_sim]
+    if (createJSON(init_population[0],save_chrom,save_cost,HSI_history,performance)):
         print "json file has writen"
 
 if __name__ == '__main__':

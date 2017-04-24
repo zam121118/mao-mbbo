@@ -28,7 +28,8 @@ html,body { margin:0; padding:0; width:100%; height:100%; overflow-y:hidden; }
 #dashboard .db-panel4 { margin:5px 0 0 5px; width:765px; height:170px;
   float:left; display:block; background:rgba(0,0,0,0.5); padding:5px; }
 #dashboard #chart-hsi-history { width: 100%; height: 170px; }
-#dashboard .db-unmoved-vm { padding: 3px; color: #CACACA; margin: 0 0 0 2px; }
+#dashboard .db-unmoved-vm { padding: 2px; color: #CACACA; margin: 0 0 0 1px;
+  font-size: .8em; line-height: .7em; float: left; }
 #dashboard .db-unmoved-vm:hover { background: deepskyblue; color: white;
   font-weight: bold; }
 
@@ -108,10 +109,10 @@ html,body { margin:0; padding:0; width:100%; height:100%; overflow-y:hidden; }
 
     <div class="db-panel">
       <h3>Performance</h3>
-      <p><i class="fa fa-clock-o"></i> Start Time: <b id="perf-time-start">20:10:44</b></p>
-      <p><i class="fa fa-clock-o"></i> End Time: <b id="perf-time-end">21:21:36</b></p>
-      <p><i class="fa fa-clock-o"></i> Sim. Time: <b id="perf-time-sim">00:21:34</b></p>
-      <p><i class="fa fa-clock-o"></i> Mig. Time: <b id="perf-time-mig">00:00:17</b></p>
+      <p><i class="fa fa-clock-o"></i> Start Time: <b id="perf-time-start">&nbsp;</b></p>
+      <p><i class="fa fa-clock-o"></i> End Time: <b id="perf-time-end">&nbsp;</b></p>
+      <p><i class="fa fa-clock-o"></i> Sim. Time: <b id="perf-time-sim">&nbsp;</b></p>
+      <p><i class="fa fa-clock-o"></i> Mig. Time: <b id="perf-time-mig">&nbsp;</b></p>
     </div><!-- .db-panel -->
 
     <div class="db-panel">
@@ -372,8 +373,10 @@ function on_over_vm() {
     vmbox.drawRect(0, 0, this.width, this.height);
 
     // highlight the migration line
-    var ln = mls[this.id];
-    ln.alpha = 1;
+    if (mls.hasOwnProperty(this.id)) {
+        var ln = mls[this.id];
+        ln.alpha = 1;
+    }
 
     show_vm_detail(this.id);
 }
@@ -385,8 +388,10 @@ function on_out_vm() {
     this.is_over = false;
     vmbox.clear();
     // fade the migration line
-    var ln = mls[this.id];
-    ln.alpha = .1;
+    if (mls.hasOwnProperty(this.id)) {
+        var ln = mls[this.id];
+        ln.alpha = .1;
+    }
 
     close_vm_detail(this.id);
 }
@@ -793,13 +798,13 @@ function update_dashboard(data) {
     $('#exp-vms-mems-num').html(count_vms_usage(data)[1].toFixed(4));
     $('#exp-vms-disk-sum').html(
       _wc((count_vms_area(data)).toFixed(4), 'violet'));
-    $('#exp-generation-num').html(data['vms_num']*data['pms_num']);
+    $('#exp-generation-num').html(data['performance'][0]);
     $('#mig-plan-num').html(_wc(count_plan_move(data), 'sienna'));
     // Performance
-    $('#perf-time-start').html();
-    $('#perf-time-end').html();
-    $('#perf-time-sim').html();
-    $('#perf-time-mig').html();
+    $('#perf-time-start').html(data['performance'][1]);
+    $('#perf-time-end').html(data['performance'][2]);
+    $('#perf-time-sim').html(data['performance'][3].toFixed(2));
+    $('#perf-time-mig').html((data['HSI_cost'][1][2]).toFixed(1));
 
     // Unmoved vms
     update_unmoved_vms(data);
@@ -994,7 +999,7 @@ function draw_hsi_history(data) {
        yAxis: [{
            type: 'value',
            name: 'Power',
-           min: 45000,
+           min: 40000,
            max: 60000,
            position: 'left',
            axisLabel: {
@@ -1003,7 +1008,7 @@ function draw_hsi_history(data) {
        },{
            type: 'value',
            name: 'Load Index',
-           min: 5,
+           min: 3,
            max: 20,
            position: 'right',
            axisLabel: {
