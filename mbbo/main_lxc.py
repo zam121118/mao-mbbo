@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 #-*- coding:utf-8 -*-
 '''
-Created on 2017-4-12
+Created on 2017-4-19
 @author: Amy
+Content: About containers' scheduler
 '''
 import time
 import random
@@ -43,13 +44,13 @@ def range2rect(size, num_var):
 def make_population(size, num_var, rp, rm, f, p_mutate, time_base, lambdaa):
     #构造一个population，包含size个候选解chrom,每个chrom是由num_var个记录各vm所放置的pm下标组成的
     population = {
-        'size': size,                                                       # int,population中chrom的个数
-        'num_var': num_var,                                                 # int,chrom元素个数，即vm个数（同时假设HM个数也是num_var）
-        'rp': rp,                                                           # list(num_var),所有vm的cpu demand
-        'rm': rm,                                                           # list(num_var),所有vm的mem demand
+        'size': size,                                                       # int,population中chrom的个数,SIV=[vm,pm]
+        'num_var': num_var,                                                 # int,chrom元素个数，即vm个数=lxc个数（hm个数需要计算）
+        'rp': rp,                                                           # list(num_var),所有lxc的cpu demand，vm的尺寸会选定集中规格
+        'rm': rm,                                                           # list(num_var),所有lxc的mem demand，
         'f': f,                                                             # float，差分因子，系统运行前必须指定
         'p_mutate': p_mutate,                                               # float,突变概率
-        'time_base': time_base,                                             # float,时间基数
+        'time_base': time_base,                                             # float,迁移时间基数（容器迁移不需要时间，无状态，需要考虑vm迁移吗？）
         'lambdaa': tuple(lambdaa),                                          # tuple(size),所有chrom候选解的迁入率，rank值越小，越优秀，迁入率越小
         'population': range2rect(size, num_var),                            # size x num_var的矩阵，每代population的size个解集合
         'population0': range2rect(size, num_var),                           # 保存初始population的所有chroms
@@ -57,7 +58,7 @@ def make_population(size, num_var, rp, rm, f, p_mutate, time_base, lambdaa):
         'm_cost': range2rect(size, num_var),                                # size x num_var的矩阵，记录每个HM被请求的MEM总量
         'power_cost': [x*0 for x in range(size)],                           # list(size),记录当前代population中，每个chrom的能耗代价
         'balance_cost': [x*0 for x in range(size)],                         # list(size),记录当前population中,每个chrom的负载均衡指数
-        'migration_time': [x*0+time_base*num_var for x in range(size)],     # list(size),记录迁移时间，这里指定为固定值
+        'migration_time': [x*0+time_base*num_var for x in range(size)],     # list(size),记录迁移时间，这里指定为固定值（容器迁移不需要时间，无状态，需要考虑vm迁移吗？）
         'rank': [x*0 for x in range(size)],                                 # list(size),记录每个chrom排名，rank值越大，排名越靠后
         'elite_power': 999999.0*num_var,                                    # float,记录每代种群中最优秀解的能耗代价值
         'elite_balance': 999999.0*num_var,                                  # float,记录每代种群中最优秀解的负载均衡指数
@@ -250,7 +251,7 @@ def get_best_cost(popu1, popu2):
         best_cost[2] = popu1['elite_migration_time']
     return best_cost
 
-def createJSON(init_population1,save_chrom,save_cost,HSI_history):
+def createJSON(init_population1,save_chrom,save_cost):
     '''
     目标：构造json文件，记录MBBO算法中的中间/最终结果保存
     参数：
@@ -261,27 +262,14 @@ def createJSON(init_population1,save_chrom,save_cost,HSI_history):
     #data字典中分别存储vm数量、pm数量、vm的cpu,mem尺寸、pm资源cpu,mem被占用量、state下标为pm，内容为该pm上的vm编号、
     #plan为每个vm的迁移src与des的hm编号，若不需要迁移则为空、
     #HSI_cost保存2个元组，分别保存初始的(power_cost,balance_cost,migration_time)和MBBO后精英解的(elite_power,elite_balance,elite_migration_time)
-    data = { 'vms_num': init_population1['num_var'], \
-        'pms_num': init_population1['num_var'], \
-		'vms':[], \
-        'state1':{'pms_used':[],'vms_place':[]}, \
-        'state0':{'pms_used':[],'vms_place':[]}, \
-        'plan':[], \
-        'HSI_cost':[], \
-        'HSI_history': HSI_history}
+    data = {'vms_num': init_population1['num_var'], 'pms_num': init_population1['num_var'], 'vms':[], 'pms':[], 'state':[], 'plan':[], 'HSI_cost':[]}
 
     # 统计每台pm上拥有的vm编号
-    vms_place = [ [] for i in range(init_population1['num_var'])] # num_var个pms
+    state = [ [] for i in range(init_population1['num_var'])] # num_var个pms
     for vm in range(len(init_population1['elite_chrom'])):
         pm = init_population1['elite_chrom'][vm]
-        vms_place[pm].append(vm)
-    data['state1']['vms_place'] = vms_place
-
-    vms_place = [ [] for i in range(init_population1['num_var'])] # num_var个pms
-    for vm in range(len(save_chrom)):
-        pm = save_chrom[vm]
-        vms_place[pm].append(vm)
-    data['state0']['vms_place'] = vms_place
+        state[pm].append(vm)
+    data['state'] = state
 
     # 统计每个vm的cpu,mem请求量
     vms = [ [] for i in range(init_population1['num_var']) ]
@@ -292,23 +280,13 @@ def createJSON(init_population1,save_chrom,save_cost,HSI_history):
     data['vms'] = vms
 
     # 统计每台pm的cpu,mem被请求量
-    data['state1']['pms_used'] = [[0,0]]*init_population1['num_var']
-    for pm in range(init_population1['num_var']):
+    data['pms'] = [[0,0]]*len(state)
+    for pm in range(len(state)):
         all_p,all_m = 0,0
-        for vm in data['state1']['vms_place'][pm]:
+        for vm in state[pm]:
             all_p += init_population1['rp'][vm]  # 计算当前pm上所有vm占用的cpu
             all_m += init_population1['rm'][vm]  # 计算当前pm上所有vm占用的mem
-        data['state1']['pms_used'][pm] = [all_p,all_m]
-
-    data['state0']['pms_used'] = [[0,0]]*init_population1['num_var']
-    for pm in range(init_population1['num_var']):
-        all_p,all_m = 0,0
-        for vm in data['state0']['vms_place'][pm]:
-            all_p += init_population1['rp'][vm]  # 计算当前pm上所有vm占用的cpu
-            all_m += init_population1['rm'][vm]  # 计算当前pm上所有vm占用的mem
-        data['state0']['pms_used'][pm] = [all_p,all_m]
-
-
+            data['pms'][pm] = [all_p,all_m]
 
     # 迁移对统计
     data['plan'] = [ [] for i in range(init_population1['num_var'])]
@@ -399,8 +377,6 @@ def main(generation,size,num_var,p):
     ## SparkContext():Main entry point for Spark functionality. A SparkContext represents the connection to a Spark cluster,and can be used to create RDD and broadcast variables on that cluster
 
     elite_cost = [9999.9*num_var, 9999.9*num_var, time_base*num_var]   # 初设的全局精英解能耗代价、负载均衡指数、迁移时间
-    HSI_values = []
-    HSI_ts = []
     save_elite_cost = [0,0,0]
     time1 = time.time()
     for g in range(generation):                                        # 设置最大迭代次数
@@ -425,16 +401,14 @@ def main(generation,size,num_var,p):
         if (save_elite_cost[0] != elite_cost[0] or save_elite_cost[1] != elite_cost[1] or save_elite_cost[2] != elite_cost[2]):
             print elite_cost[0], elite_cost[1], elite_cost[2]
             save_elite_cost = elite_cost[:]
-            HSI_values.append(save_elite_cost)
-            HSI_ts.append(time.time() - time1)
 
-    HSI_history = {'values': HSI_values, 'ts': HSI_ts}
+
     time2 = time.time()
     print 'Time cost: ', (time2 - time1), '\n'
     print 'the init chrom maybe is %s, use %s pms' %(save_chrom,len(set(save_chrom)))
     print 'after mbbo, chrom maybe is %s, use %s pms' %(init_population[0]['elite_chrom'],len(set(init_population[0]['elite_chrom'])))
     #sc.stop()
-    if (createJSON(init_population[0],save_chrom,save_cost,HSI_history)):
+    if (createJSON(init_population[0],save_chrom,save_cost)):
         print "json file has writen"
 
 if __name__ == '__main__':
