@@ -401,7 +401,7 @@ def main(generation,size,num_var,p):
     f = 0.6                                # 差分因子
     rp_u = 0.25                            # VM请求CPU的指导变量
     rm_u = 0.25                            # VM请求MEM的指导变量
-    # p = 1.0
+    p = 1.0
     time_base = 65                         # 作为单台虚拟机迁移的基准时间
 
     # random create num_var vms with cpu,mem requirements
