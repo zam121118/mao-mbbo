@@ -37,7 +37,7 @@ def range2rect(size, num_var):
     for i in range(size):
         res[i] = range(num_var)
     # 简单写法
-    #res = [[[] for j in range(num_var)] for i in range(num_var)]
+    #res = [[[] for j in range(num_var)] for i in range(size)]
     return res
 
 def make_population(size, num_var, rp, rm, f, p_mutate, time_base, lambdaa):
@@ -332,9 +332,7 @@ def createJSON(init_population1,save_chrom,save_cost,HSI_history,performance):
             all_m += init_population1['rm'][vm]  # 计算当前pm上所有vm占用的mem
         data['state0']['pms_used'][pm] = [all_p,all_m]
 
-
-
-    # 迁移对统计
+    ## 迁移对统计
     data['plan'] = [ [] for i in range(init_population1['num_var'])]
     for vm in range(init_population1['num_var']):
         #if (save_chrom[vm] != init_population1['elite_chrom'][vm]):   # 如果初始候选解中某vm存放的hm编号不等于MBBO之后精英解该vm存放的hm编号，则认为需要迁移，两个hm编号分别为src,des位置
@@ -401,7 +399,7 @@ def main(generation,size,num_var,p):
     f = 0.6                                # 差分因子
     rp_u = 0.25                            # VM请求CPU的指导变量
     rm_u = 0.25                            # VM请求MEM的指导变量
-    p = 1.0
+    p = p
     time_base = 65                         # 作为单台虚拟机迁移的基准时间
 
     # random create num_var vms with cpu,mem requirements
@@ -422,10 +420,15 @@ def main(generation,size,num_var,p):
     #sc = SparkContext(appName="Paralleled MBBO/DE algorithm")
     ## SparkContext():Main entry point for Spark functionality. A SparkContext represents the connection to a Spark cluster,and can be used to create RDD and broadcast variables on that cluster
 
+    # 初始种群的代价即候选解
+    tmp = random.randint(0,size-1)                                 # 从每个群岛的population中size个随机选出第tmp各解
+    save_chrom = init_population[0]['population'][tmp]             # 随机挑选的第tmp个初始候选解，代表MBBO执行前vm-hm拓扑关系
+    save_cost = (init_population[0]['power_cost'][tmp],init_population[0]['balance_cost'][tmp],init_population[0]['migration_time'][tmp]) # 第tmp个初始候选解的3个HSI代价值
+
     elite_cost = [9999.9*num_var, 9999.9*num_var, time_base*num_var]   # 初设的全局精英解能耗代价、负载均衡指数、迁移时间
-    HSI_values = []
-    HSI_ts = []
-    save_elite_cost = [0,0,0]
+    HSI_values = []                                                    # 写进json文件，记录变化的全局最优解，用于mbbo页面图标展示
+    HSI_ts = []                                                        # 与HSI_values搭配，记录改变的全局最优解及该代的时间，用于mbbo页面展示
+    save_elite_cost = [0,0,0]                                          # 用于保存每一代的全局最优解，并在新的一代时比较有否变化，只有改变后才会打印，否则不打印
     time1 = time.time()                                                # 算法迭代进化开始时间戳
 
     for g in range(generation):                                        # 设置最大迭代次数
@@ -436,18 +439,14 @@ def main(generation,size,num_var,p):
         init_population[0] = mbbode_cost(init_population[0])
         init_population[0] = mbbode_rank(init_population[0])
 
-
-        tmp = random.randint(0,size-1)                                 # 从每个群岛的population中size个随机选出第tmp各解
-        save_chrom = init_population[0]['population'][tmp]             # 随机挑选的第tmp个初始候选解，代表MBBO执行前vm-hm拓扑关系
-        save_cost = (init_population[0]['power_cost'][tmp],init_population[0]['balance_cost'][tmp],init_population[0]['migration_time'][tmp]) # 第tmp个初始候选解的3个HSI代价值
-
-
+        # 全局最优解替换
         for i in range(father_size):                                   # 获取全局最优解的能耗代价、负载均衡指数、以及迁移时间
             if(elite_cost[0] > init_population[i]['elite_power'] and elite_cost[1] > init_population[i]['elite_balance']):
                 elite_cost[0] = init_population[i]['elite_power']
                 elite_cost[1] = init_population[i]['elite_balance']
                 elite_cost[2] = init_population[i]['elite_migration_time']
-        if (save_elite_cost[0] != elite_cost[0] or save_elite_cost[1] != elite_cost[1] or save_elite_cost[2] != elite_cost[2]):
+        # 展示改变后的全局最优解
+        if (save_elite_cost[0] != elite_cost[0] or save_elite_cost[1] != elite_cost[1] or save_elite_cost[2] != elite_cost[2]):    # 每一代全局最优解有变化时才会记录并打印
             print elite_cost[0], elite_cost[1], elite_cost[2]
             save_elite_cost = elite_cost[:]
             HSI_values.append(save_elite_cost)
@@ -460,7 +459,7 @@ def main(generation,size,num_var,p):
     time1 = time.strftime('%H:%M:%S',time.localtime(time1))
     time2 = time.strftime('%H:%M:%S',time.localtime(time2))
     print time1,time2
-    print 'the init chrom maybe is %s, use %s pms' %(save_chrom,len(set(save_chrom)))
+    print 'the init chrom maybe is %s, use %s pms, the cost is %s' %(save_chrom,len(set(save_chrom)),save_cost)
     print 'after mbbo, chrom maybe is %s, use %s pms' %(init_population[0]['elite_chrom'],len(set(init_population[0]['elite_chrom'])))
     #sc.stop()
     performance = [generation,time1,time2,time_sim]
@@ -468,4 +467,4 @@ def main(generation,size,num_var,p):
         print "json file has writen"
 
 if __name__ == '__main__':
-    main(1000,10,200,1.0)
+    main(10000,10,200,0.9)
