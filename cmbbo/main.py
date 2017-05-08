@@ -11,6 +11,9 @@ import json
 import sys
 #from pyspark import SparkContext
 
+## 在整个代码中，一直重复遇到的问题：1. 每个vm到hm的映射应该是唯一的,不会出现 12-4, 12-17 并存的情况（已解决）
+## 2. 多个分布于同一hm的vm资源不应该超过hm资源约束
+
 def initDocker(rp_u,rm_u,p,num_var):
     '''
     目标：随机生成测试虚拟机集中每个vm对cpu和mem的资源请求
@@ -82,24 +85,32 @@ def checkeffective(popu1,size,num_var):
             popu1['v_m_cost'][i][j] = 0
             popu1['h_p_cost'][i][j] = 0
             popu1['h_m_cost'][i][j] = 0
-    # 逐一按照候选解，计算实际占用的vm,hm资源
-    vm_used_id = [ [] for x in xrange(size)]        # 避免相同vm同时被映射的不同hm的错误
+    ## 逐一按照候选解，计算实际占用的vm,hm资源
     for i in xrange(size):
-        for j in xrange(num_var):                   # 容器编号
+        vm_used_id = {}                                # 避免相同vm同时被映射的不同hm的错误
+        for j in xrange(num_var):                      # 容器编号
             flag = True
             v_id = popu1['population'][i][j][0]
             h_id = popu1['population'][i][j][1]
-            popu1['v_p_cost'][i][v_id] += popu1['c_rp'][j]
-            popu1['v_m_cost'][i][v_id] += popu1['c_rm'][j]
-            for x,y in vm_used_id[i]:                     # 保证已安排映射的vm被再次安排
-                if (x == v_id):
-                    flag = False
-            if flag:
+            if v_id in vm_used_id:                     # 若vm已经被安排过
+                if (h_id == vm_used_id[v_id]):         # 且所在的hm与安排过的hm相同，则跳过该次循环，不需要重新计算资源占用
+                    continue
+                else:                                  # 若hm不同于安排的hm编号，说明出现同一个vm映射到不同hm的错误，直接返回
+                    print "in this chrom %s, a vm has been hosted on different hm, totally wrong!! " %popu1['population'][i]
+                    return False
+            else:                                                 # 其他情况包括,包括多vm映射到1个hm,按正常情况计算
+                popu1['v_p_cost'][i][v_id] += popu1['c_rp'][j]
+                popu1['v_m_cost'][i][v_id] += popu1['c_rm'][j]
                 popu1['h_p_cost'][i][h_id] += popu1['v_rp'][v_id]
                 popu1['h_m_cost'][i][h_id] += popu1['v_rm'][v_id]
-                vm_used_id[i].append((v_id,h_id))
-        for x in xrange(num_var):
+                vm_used_id[v_id] = h_id
+        for x in xrange(num_var):                                  # 只要超出资源限约束，即报错
             if (popu1['v_p_cost'][i][x] > popu1['v_rp'][x] or popu1['v_m_cost'][i][x] > popu1['v_rm'][x] or popu1['h_p_cost'][i][x] > 1.0 or popu1['h_m_cost'][i][x] > 1.0):
+                print popu1['v_p_cost'][i][x], popu1['v_rp'][x]
+                print popu1['v_m_cost'][i][x], popu1['v_rm'][x]
+                print popu1['h_p_cost'][i][x]
+                print popu1['h_m_cost'][i][x]
+                print "find a error:",popu1['population'][i],x,vm_used_id,'\n'
                 return False
     return True
 
@@ -180,17 +191,7 @@ def initialize_population(popu1,size,num_var):
                             vm_used_id[i].append((tmp_v_id,tmp_h_id))
                             break
                     break
-    #     print popu1['population'][i],'\n'      #为了测试赋值情况
-    #     print popu1['v_p_cost'][i],'\n'
-    #     print popu1['v_m_cost'][i],'\n'
-    #     print popu1['h_p_cost'][i],'\n'
-    #     print popu1['h_m_cost'][i],'\n'
-    # print popu1['c_rp'],'\n'
-    # print popu1['c_rm'],'\n'
-    # print popu1['v_rp'],'\n'
-    # print popu1['v_rm'],'\n'
-
-    ## 保存初代种群
+    # 保存初代种群
     for i in xrange(size):
         popu1['init_save'][i] = popu1['population'][i][:]
     if checkeffective(popu1,size,num_var):
@@ -200,13 +201,56 @@ def initialize_population(popu1,size,num_var):
         sys.exit("not effective in compute initialize_population")
 
 
-def mbbode_migration(popu1,size,num_var,f,lambdaa):
+# def mbbode_migration(popu1,size,num_var,f,lambdaa):
     '''
     ！！！！！！！！迁移代码有错，出现 [[4, 13], [3, 13]， [8, 8],[13, 8], [5, 11]， [7, 11], [4, 7], [4, 13], [1, 9], [1, 0]],这种vm-hm的分布情况
     一旦被迁移概率选中：则进行2个层次的迁移——docker所在的vm编号迁移，vm所在的hm编号迁移(只有两层迁移，才可能调整vm-hm分布方式)
     '''
-    for i in range(0,size):
-        for j in xrange(0,num_var):
+    print lambdaa
+    # lj版mbbo的迁移，突变逻辑不适合现在的逻辑：1,容器直接放置的vm的编号会重复出现 2,vm-hm的关系应该是多对一的，不是多对多
+    # 因此，应该放弃进行vm,hm同时迁移，突变的想法; 先安排所有容器的vm迁移，整体完成后再进行所有占用的vm到hm的映射
+    # for i in xrange(0,size):
+    #     for j in xrange(0,num_var):
+    #         rand_sum = random.random()
+    #         lambda_scale = (lambdaa[i] - lambdaa[0]) / (lambdaa[size-1] - lambdaa[0])   # 标准化迁入率lambda_scale，即该chrom被选为迁入chrom的概率
+    #         if(rand_sum < lambda_scale):                                            # 被选为迁入chrom中的第j元素有rand_sum概率被选为迁出chrom随机生成的SIV替换
+    #             index1 = random.randint(0, size-1)
+    #             index2 = random.randint(0, size-1)
+    #             while(index1 == index2):
+    #                 index2 = random.randint(0, size-1)
+    #             #实现差分迁移，计算被迁入率选中的chrom中，随机选中的SIV将被差分迁移引入的新SIV值（该位置vm将被重新安排的HM标号）
+    #             tmp_v_id = abs(int(popu1['population'][i][j][0] + f*(popu1['population'][i][j][0]-popu1['population'][index1][j][0]) + f*(popu1['population'][index1][j][0]-popu1['population'][index2][j][0] + 0.5)) % num_var)
+    #             tmp_h_id = abs(int(popu1['population'][i][j][1] + f*(popu1['population'][i][j][1]-popu1['population'][index1][j][1]) + f*(popu1['population'][index1][j][1]-popu1['population'][index2][j][1] + 0.5)) % num_var)
+    #             while(True):
+    #                 cpu_tmp_v = popu1['v_p_cost'][i][tmp_v_id] + popu1['c_rp'][j]
+    #                 mem_tmp_v = popu1['v_m_cost'][i][tmp_v_id] + popu1['c_rm'][j]
+    #                 cpu_tmp_h = popu1['h_p_cost'][i][tmp_h_id] + popu1['v_rp'][tmp_v_id]
+    #                 mem_tmp_h = popu1['h_m_cost'][i][tmp_h_id] + popu1['v_rm'][tmp_v_id]
+    #                 print tmp_v_id,cpu_tmp_v,mem_tmp_v,tmp_h_id,cpu_tmp_h,mem_tmp_h
+    #                 if(cpu_tmp_h <= 1.0 and mem_tmp_h <= 1.0 and cpu_tmp_v <= popu1['v_rp'][tmp_v_id] and mem_tmp_v <= popu1['v_rm'][tmp_v_id]):                  # 若该vm重新安排至pm(tmp_position)后，cpu,mem资源使用量不超标，则进行替换;否则继续循环查找可容纳该vm的新pm
+    #                     origin_v_id = popu1['population'][i][j][0]
+    #                     origin_h_id = popu1['population'][i][j][1]
+    #                     popu1['population'][i][j] = [tmp_v_id,tmp_h_id]
+    #                     popu1['v_p_cost'][i][tmp_v_id] = cpu_tmp_v
+    #                     popu1['v_m_cost'][i][tmp_v_id] = mem_tmp_v
+    #                     popu1['v_p_cost'][i][origin_v_id] -= popu1['c_rp'][j]
+    #                     popu1['v_m_cost'][i][origin_v_id] -= popu1['c_rm'][j]
+    #                     #
+    #                     popu1['h_p_cost'][i][tmp_h_id] = cpu_tmp_h
+    #                     popu1['h_m_cost'][i][tmp_h_id] = mem_tmp_h
+    #                     popu1['h_p_cost'][i][origin_h_id] -= popu1['v_rp'][tmp_v_id]
+    #                     popu1['h_m_cost'][i][origin_h_id] -= popu1['v_rm'][tmp_v_id]
+    #                     print "have migrate successfully!,i=%s,j=%s\n" %(i,j)
+    #                     break
+    #                 else:
+    #                     tmp_v_id = (tmp_v_id + 1) % num_var
+    #                     tmp_h_id = (tmp_h_id + 1) % num_var
+
+    for i in xrange(size):
+        vm_used_id = dict(popu1['population'][i])
+        print vm_used_id
+        print popu1['h_p_cost'][i]
+        for j in xrange(num_var):
             rand_sum = random.random()
             lambda_scale = (lambdaa[i] - lambdaa[0]) / (lambdaa[size-1] - lambdaa[0])   # 标准化迁入率lambda_scale，即该chrom被选为迁入chrom的概率
             if(rand_sum < lambda_scale):                                            # 被选为迁入chrom中的第j元素有rand_sum概率被选为迁出chrom随机生成的SIV替换
@@ -217,29 +261,103 @@ def mbbode_migration(popu1,size,num_var,f,lambdaa):
                 #实现差分迁移，计算被迁入率选中的chrom中，随机选中的SIV将被差分迁移引入的新SIV值（该位置vm将被重新安排的HM标号）
                 tmp_v_id = abs(int(popu1['population'][i][j][0] + f*(popu1['population'][i][j][0]-popu1['population'][index1][j][0]) + f*(popu1['population'][index1][j][0]-popu1['population'][index2][j][0] + 0.5)) % num_var)
                 tmp_h_id = abs(int(popu1['population'][i][j][1] + f*(popu1['population'][i][j][1]-popu1['population'][index1][j][1]) + f*(popu1['population'][index1][j][1]-popu1['population'][index2][j][1] + 0.5)) % num_var)
-                while(True):
-                    cpu_tmp_v = popu1['v_p_cost'][i][tmp_v_id] + popu1['c_rp'][j]
-                    mem_tmp_v = popu1['v_m_cost'][i][tmp_v_id] + popu1['c_rm'][j]
-                    cpu_tmp_h = popu1['h_p_cost'][i][tmp_h_id] + popu1['v_rp'][tmp_v_id]
-                    mem_tmp_h = popu1['h_m_cost'][i][tmp_h_id] + popu1['v_rm'][tmp_v_id]
-                    if(cpu_tmp_v <= popu1['v_rp'][tmp_v_id] and mem_tmp_v <= popu1['v_rm'][tmp_v_id] and cpu_tmp_h <= 1.0 and mem_tmp_h <= 1.0):                  # 若该vm重新安排至pm(tmp_position)后，cpu,mem资源使用量不超标，则进行替换;否则继续循环查找可容纳该vm的新pm
-                        origin_v_id = popu1['population'][i][j][0]
-                        origin_h_id = popu1['population'][i][j][1]
-                        popu1['population'][i][j] = [tmp_v_id,tmp_h_id]
-                        popu1['v_p_cost'][i][tmp_v_id] = cpu_tmp_v
-                        popu1['v_m_cost'][i][tmp_v_id] = mem_tmp_v
-                        popu1['v_p_cost'][i][origin_v_id] -= popu1['c_rp'][j]
-                        popu1['v_m_cost'][i][origin_v_id] -= popu1['c_rm'][j]
-                        #
-                        popu1['h_p_cost'][i][tmp_h_id] = cpu_tmp_h
-                        popu1['h_m_cost'][i][tmp_h_id] = mem_tmp_h
-                        popu1['h_p_cost'][i][origin_h_id] -= popu1['v_rp'][tmp_v_id]
-                        popu1['h_m_cost'][i][origin_h_id] -= popu1['v_rm'][tmp_v_id]
-                        print "have migrate successfully!,i=%s,j=%s\n" %(i,j)
-                        break
-                    else:
-                        tmp_v_id = (tmp_v_id + 1) % num_var
-                        tmp_h_id = (tmp_h_id + 1) % num_var
+                cpu_tmp_v = popu1['v_p_cost'][i][tmp_v_id] + popu1['c_rp'][j]
+                mem_tmp_v = popu1['v_m_cost'][i][tmp_v_id] + popu1['c_rm'][j]
+                print tmp_v_id,tmp_h_id,cpu_tmp_v,mem_tmp_v,vm_used_id
+                if (cpu_tmp_v <= popu1['v_rp'][tmp_v_id] and mem_tmp_v <= popu1['v_rm'][tmp_v_id]):       # 判断vm层资源约束
+                    flag = True
+                    while(flag):
+                        if (tmp_v_id not in vm_used_id):         # 为容器新产生的vm，直接进行资源约束判断
+                            cpu_tmp_h = popu1['h_p_cost'][i][tmp_h_id] + popu1['v_rp'][tmp_v_id]
+                            mem_tmp_h = popu1['h_m_cost'][i][tmp_h_id] + popu1['v_rm'][tmp_v_id]
+                            print 'no, not in',cpu_tmp_h,mem_tmp_h
+                            if(cpu_tmp_h <= 1.0 and mem_tmp_h <= 1.0):                                 # 若满足资源限制，则更改vm,hm实际资源占用数据
+                                origin_v_id, origin_h_id = popu1['population'][i][j][0], popu1['population'][i][j][1]
+                                popu1['population'][i][j] = [tmp_v_id,tmp_h_id]
+                                popu1['v_p_cost'][i][tmp_v_id] = cpu_tmp_v
+                                popu1['v_m_cost'][i][tmp_v_id] = mem_tmp_v
+                                popu1['v_p_cost'][i][origin_v_id] -= popu1['c_rp'][j]
+                                popu1['v_m_cost'][i][origin_v_id] -= popu1['c_rm'][j]
+                                #
+                                popu1['h_p_cost'][i][tmp_h_id] = cpu_tmp_h
+                                popu1['h_m_cost'][i][tmp_h_id] = mem_tmp_h
+                                popu1['h_p_cost'][i][origin_h_id] -= popu1['v_rp'][tmp_v_id]
+                                popu1['h_m_cost'][i][origin_h_id] -= popu1['v_rm'][tmp_v_id]
+                                vm_used_id[tmp_v_id] = tmp_h_id                                                 # 并添加该组vm-hm映射到字典中
+                                flag = False                                                                    # 设置跳出while循环标志
+                                print "%s,%s have migrate successfully!,vm_used_id = %s, h_p_cost = %s \n" %(i,j,vm_used_id,popu1['h_m_cost'][i])
+                            else:
+                                tmp_v_id = (tmp_v_id + 1) % num_var                                             # 若不满足，则生成新的vm,hm重新进行while循环
+                                tmp_h_id = (tmp_h_id + 1) % num_var
+                        elif (tmp_v_id in vm_used_id):                                        # 若为容器进化的产生的vm，已经存在
+                            #if (cpu_tmp_v <= popu1['v_rp'][tmp_v_id] and mem_tmp_v <= popu1['v_rm'][tmp_v_id]):        # 并且满足资源约束，则直接将该vm与其对应的hm赋给容器
+                            print 'yes, in', popu1['h_p_cost'][i][vm_used_id[tmp_v_id]]
+                            origin_v_id = popu1['population'][i][j][0]
+                            popu1['population'][i][j] = [tmp_v_id,vm_used_id[tmp_v_id]]
+                            popu1['v_p_cost'][i][tmp_v_id] = cpu_tmp_v
+                            popu1['v_m_cost'][i][tmp_v_id] = mem_tmp_v
+                            popu1['v_p_cost'][i][origin_v_id] -= popu1['c_rp'][j]
+                            popu1['v_m_cost'][i][origin_v_id] -= popu1['c_rm'][j]
+                            flag = False                                                              # 并设置while 循环标志为False
+                            print "just find a serving vm-hm"
+                else:
+                    tmp_v_id = (tmp_v_id + 1) % num_var
+
+
+    # for i in xrange(size):
+    #     vm_used_id = dict(popu1['population'][i])
+    #     for j in xrange(num_var):
+    #         rand_sum = random.random()
+    #         lambda_scale = (lambdaa[i] - lambdaa[0]) / (lambdaa[size-1] - lambdaa[0])   # 标准化迁入率lambda_scale，即该chrom被选为迁入chrom的概率
+    #         if(rand_sum < lambda_scale):                                            # 被选为迁入chrom中的第j元素有rand_sum概率被选为迁出chrom随机生成的SIV替换
+    #             index1 = random.randint(0, size-1)
+    #             index2 = random.randint(0, size-1)
+    #             while(index1 == index2):
+    #                 index2 = random.randint(0, size-1)
+    #             #实现差分迁移，计算被迁入率选中的chrom中，随机选中的SIV将被差分迁移引入的新SIV值（该位置vm将被重新安排的HM标号）
+    #             tmp_v_id = abs(int(popu1['population'][i][j][0] + f*(popu1['population'][i][j][0]-popu1['population'][index1][j][0]) + f*(popu1['population'][index1][j][0]-popu1['population'][index2][j][0] + 0.5)) % num_var)
+    #             tmp_h_id = abs(int(popu1['population'][i][j][1] + f*(popu1['population'][i][j][1]-popu1['population'][index1][j][1]) + f*(popu1['population'][index1][j][1]-popu1['population'][index2][j][1] + 0.5)) % num_var)
+    #             flag = True
+    #             while(flag):
+    #                 cpu_tmp_v = popu1['v_p_cost'][i][tmp_v_id] + popu1['c_rp'][j]
+    #                 mem_tmp_v = popu1['v_m_cost'][i][tmp_v_id] + popu1['c_rm'][j]
+    #                 if (tmp_v_id not in vm_used_id):                                               # 为容器新产生的vm，直接进行资源约束判断
+    #                     cpu_tmp_h = popu1['h_p_cost'][i][tmp_h_id] + popu1['v_rp'][tmp_v_id]
+    #                     mem_tmp_h = popu1['h_m_cost'][i][tmp_h_id] + popu1['v_rm'][tmp_v_id]
+    #                     print tmp_v_id,'not in',tmp_h_id,cpu_tmp_v,mem_tmp_v,cpu_tmp_h,mem_tmp_h,i,j
+    #                     if(cpu_tmp_h <= 1.0 and mem_tmp_h <= 1.0 and cpu_tmp_v <= popu1['v_rp'][tmp_v_id] and mem_tmp_v <= popu1['v_rm'][tmp_v_id]):
+    #                         origin_v_id = popu1['population'][i][j][0]                                      # 若满足资源限制，则更改vm,hm实际资源占用数据
+    #                         origin_h_id = popu1['population'][i][j][1]
+    #                         popu1['population'][i][j] = [tmp_v_id,tmp_h_id]
+    #                         popu1['v_p_cost'][i][tmp_v_id] = cpu_tmp_v
+    #                         popu1['v_m_cost'][i][tmp_v_id] = mem_tmp_v
+    #                         popu1['v_p_cost'][i][origin_v_id] -= popu1['c_rp'][j]
+    #                         popu1['v_m_cost'][i][origin_v_id] -= popu1['c_rm'][j]
+    #                         #
+    #                         popu1['h_p_cost'][i][tmp_h_id] = cpu_tmp_h
+    #                         popu1['h_m_cost'][i][tmp_h_id] = mem_tmp_h
+    #                         popu1['h_p_cost'][i][origin_h_id] -= popu1['v_rp'][tmp_v_id]
+    #                         popu1['h_m_cost'][i][origin_h_id] -= popu1['v_rm'][tmp_v_id]
+    #                         vm_used_id[tmp_v_id] = tmp_h_id                                                 # 并添加该组vm-hm映射到字典中
+    #                         flag = False                                                                    # 设置跳出while循环标志
+    #                         print "have migrate successfully!,i=%s,j=%s\n" %(i,j)
+    #                     else:
+    #                         tmp_v_id = (tmp_v_id + 1) % num_var                                             # 若不满足，则生成新的vm,hm重新进行while循环
+    #                         tmp_h_id = (tmp_h_id + 1) % num_var
+    #                 elif (tmp_v_id in vm_used_id):                                        # 若为容器进化的产生的vm，已经存在
+    #                     print tmp_v_id,'in',vm_used_id[tmp_v_id],cpu_tmp_v,mem_tmp_v,i,j
+    #                     if (cpu_tmp_v <= popu1['v_rp'][tmp_v_id] and mem_tmp_v <= popu1['v_rm'][tmp_v_id]):        # 并且满足资源约束，则直接将该vm与其对应的hm赋给容器
+    #                         origin_v_id = popu1['population'][i][j][0]
+    #                         popu1['population'][i][j] = [tmp_v_id,vm_used_id[tmp_v_id]]
+    #                         popu1['v_p_cost'][i][tmp_v_id] = cpu_tmp_v
+    #                         popu1['v_m_cost'][i][tmp_v_id] = mem_tmp_v
+    #                         popu1['v_p_cost'][i][origin_v_id] -= popu1['c_rp'][j]
+    #                         popu1['v_m_cost'][i][origin_v_id] -= popu1['c_rm'][j]
+    #                         flag = False                                                              # 并设置while 循环标志为False
+    #                         print "just find a serving vm-hm"
+    #                     else:                                                                          # 若不满足，则生成新的vm,hm重新进行while循环
+    #                         tmp_v_id = (tmp_v_id + 1) % num_var
+    #                         tmp_h_id = (tmp_h_id + 1) % num_var
     # 尽量清零
     for i in xrange(size):
         for j in xrange(num_var):
@@ -251,23 +369,159 @@ def mbbode_migration(popu1,size,num_var,f,lambdaa):
                 popu1['h_p_cost'][i][j] = 0
             elif(popu1['h_m_cost'][i][j] < 0.0001):
                 popu1['h_m_cost'][i][j] = 0
-
-    print popu1
+    # 有效性检测
     if checkeffective(popu1,size,num_var):
         #print "it's effective, population = %s" %popu1['population']
         return popu1
     else:
+        print popu1
         sys.exit("not effective in compute mbbode_migration")
+def mbbode_migration(popu1,size,num_var,f,lambdaa):
+    '''
+    ！！！！！！！！迁移代码有错，出现 [[4, 13], [3, 13]， [8, 8],[13, 8], [5, 11]， [7, 11], [4, 7], [4, 13], [1, 9], [1, 0]],这种vm-hm的分布情况
+    一旦被迁移概率选中：则进行2个层次的迁移——docker所在的vm编号迁移，vm所在的hm编号迁移(只有两层迁移，才可能调整vm-hm分布方式)
+    '''
+    for i in xrange(size):
+        vm_used_id = dict(popu1['population'][i])
+        print vm_used_id
+        print popu1['h_p_cost'][i]
+        for j in xrange(num_var):
+            rand_sum = random.random()
+            lambda_scale = (lambdaa[i] - lambdaa[0]) / (lambdaa[size-1] - lambdaa[0])   # 标准化迁入率lambda_scale，即该chrom被选为迁入chrom的概率
+            if(rand_sum < lambda_scale):                                            # 被选为迁入chrom中的第j元素有rand_sum概率被选为迁出chrom随机生成的SIV替换
+                index1 = random.randint(0, size-1)
+                index2 = random.randint(0, size-1)
+                while(index1 == index2):
+                    index2 = random.randint(0, size-1)
+                #实现差分迁移，计算被迁入率选中的chrom中，随机选中的SIV将被差分迁移引入的新SIV值（该位置vm将被重新安排的HM标号）
+                tmp_v_id = abs(int(popu1['population'][i][j][0] + f*(popu1['population'][i][j][0]-popu1['population'][index1][j][0]) + f*(popu1['population'][index1][j][0]-popu1['population'][index2][j][0] + 0.5)) % num_var)
+                tmp_h_id = abs(int(popu1['population'][i][j][1] + f*(popu1['population'][i][j][1]-popu1['population'][index1][j][1]) + f*(popu1['population'][index1][j][1]-popu1['population'][index2][j][1] + 0.5)) % num_var)
+                cpu_tmp_v = popu1['v_p_cost'][i][tmp_v_id] + popu1['c_rp'][j]
+                mem_tmp_v = popu1['v_m_cost'][i][tmp_v_id] + popu1['c_rm'][j]
+                print tmp_v_id,tmp_h_id,cpu_tmp_v,mem_tmp_v
+                if (cpu_tmp_v <= popu1['v_rp'][tmp_v_id] and mem_tmp_v <= popu1['v_rm'][tmp_v_id]):       # 判断vm层资源约束
+                    flag = True
+                    while(flag):
+                        if (tmp_v_id not in vm_used_id):                                               # 为容器新产生的vm，直接进行资源约束判断
+                            cpu_tmp_h = popu1['h_p_cost'][i][tmp_h_id] + popu1['v_rp'][tmp_v_id]
+                            mem_tmp_h = popu1['h_m_cost'][i][tmp_h_id] + popu1['v_rm'][tmp_v_id]
+                            print 'no, not in',cpu_tmp_h,mem_tmp_h
+                            if(cpu_tmp_h <= 1.0 and mem_tmp_h <= 1.0):                                 # 若满足资源限制，则更改vm,hm实际资源占用数据
+                                origin_v_id, origin_h_id = popu1['population'][i][j][0], popu1['population'][i][j][1]
+                                popu1['population'][i][j] = [tmp_v_id,tmp_h_id]
+                                popu1['v_p_cost'][i][tmp_v_id] = cpu_tmp_v
+                                popu1['v_m_cost'][i][tmp_v_id] = mem_tmp_v
+                                popu1['v_p_cost'][i][origin_v_id] -= popu1['c_rp'][j]
+                                popu1['v_m_cost'][i][origin_v_id] -= popu1['c_rm'][j]
+                                #
+                                popu1['h_p_cost'][i][tmp_h_id] = cpu_tmp_h
+                                popu1['h_m_cost'][i][tmp_h_id] = mem_tmp_h
+                                #popu1['h_p_cost'][i][origin_h_id] -= popu1['v_rp'][tmp_v_id]
+                                #popu1['h_m_cost'][i][origin_h_id] -= popu1['v_rm'][tmp_v_id]
+                                vm_used_id[tmp_v_id] = tmp_h_id                                                 # 并添加该组vm-hm映射到字典中
+                                flag = False                                                                    # 设置跳出while循环标志
+                                print "%s,%s have migrate successfully!,vm_used_id = %s, h_p_cost = %s \n" %(i,j,vm_used_id,popu1['h_m_cost'][i])
+                            else:
+                                tmp_v_id = (tmp_v_id + 1) % num_var                                             # 若不满足，则生成新的vm,hm重新进行while循环
+                                tmp_h_id = (tmp_h_id + 1) % num_var
+                        elif (tmp_v_id in vm_used_id):                                        # 若为容器进化的产生的vm，已经存在
+                            #if (cpu_tmp_v <= popu1['v_rp'][tmp_v_id] and mem_tmp_v <= popu1['v_rm'][tmp_v_id]):        # 并且满足资源约束，则直接将该vm与其对应的hm赋给容器
+                            print 'yes, in', popu1['h_p_cost'][i][vm_used_id[tmp_v_id]]
+                            origin_v_id = popu1['population'][i][j][0]
+                            popu1['population'][i][j] = [tmp_v_id,vm_used_id[tmp_v_id]]
+                            popu1['v_p_cost'][i][tmp_v_id] = cpu_tmp_v
+                            popu1['v_m_cost'][i][tmp_v_id] = mem_tmp_v
+                            popu1['v_p_cost'][i][origin_v_id] -= popu1['c_rp'][j]
+                            popu1['v_m_cost'][i][origin_v_id] -= popu1['c_rm'][j]
+                            flag = False                                                              # 并设置while 循环标志为False
+                            print "just find a serving vm-hm"
+                else:
+                    tmp_v_id = (tmp_v_id + 1) % num_var
 
+
+    # for i in xrange(size):
+    #     vm_used_id = dict(popu1['population'][i])
+    #     for j in xrange(num_var):
+    #         rand_sum = random.random()
+    #         lambda_scale = (lambdaa[i] - lambdaa[0]) / (lambdaa[size-1] - lambdaa[0])   # 标准化迁入率lambda_scale，即该chrom被选为迁入chrom的概率
+    #         if(rand_sum < lambda_scale):                                            # 被选为迁入chrom中的第j元素有rand_sum概率被选为迁出chrom随机生成的SIV替换
+    #             index1 = random.randint(0, size-1)
+    #             index2 = random.randint(0, size-1)
+    #             while(index1 == index2):
+    #                 index2 = random.randint(0, size-1)
+    #             #实现差分迁移，计算被迁入率选中的chrom中，随机选中的SIV将被差分迁移引入的新SIV值（该位置vm将被重新安排的HM标号）
+    #             tmp_v_id = abs(int(popu1['population'][i][j][0] + f*(popu1['population'][i][j][0]-popu1['population'][index1][j][0]) + f*(popu1['population'][index1][j][0]-popu1['population'][index2][j][0] + 0.5)) % num_var)
+    #             tmp_h_id = abs(int(popu1['population'][i][j][1] + f*(popu1['population'][i][j][1]-popu1['population'][index1][j][1]) + f*(popu1['population'][index1][j][1]-popu1['population'][index2][j][1] + 0.5)) % num_var)
+    #             flag = True
+    #             while(flag):
+    #                 cpu_tmp_v = popu1['v_p_cost'][i][tmp_v_id] + popu1['c_rp'][j]
+    #                 mem_tmp_v = popu1['v_m_cost'][i][tmp_v_id] + popu1['c_rm'][j]
+    #                 if (tmp_v_id not in vm_used_id):                                               # 为容器新产生的vm，直接进行资源约束判断
+    #                     cpu_tmp_h = popu1['h_p_cost'][i][tmp_h_id] + popu1['v_rp'][tmp_v_id]
+    #                     mem_tmp_h = popu1['h_m_cost'][i][tmp_h_id] + popu1['v_rm'][tmp_v_id]
+    #                     print tmp_v_id,'not in',tmp_h_id,cpu_tmp_v,mem_tmp_v,cpu_tmp_h,mem_tmp_h,i,j
+    #                     if(cpu_tmp_h <= 1.0 and mem_tmp_h <= 1.0 and cpu_tmp_v <= popu1['v_rp'][tmp_v_id] and mem_tmp_v <= popu1['v_rm'][tmp_v_id]):
+    #                         origin_v_id = popu1['population'][i][j][0]                                      # 若满足资源限制，则更改vm,hm实际资源占用数据
+    #                         origin_h_id = popu1['population'][i][j][1]
+    #                         popu1['population'][i][j] = [tmp_v_id,tmp_h_id]
+    #                         popu1['v_p_cost'][i][tmp_v_id] = cpu_tmp_v
+    #                         popu1['v_m_cost'][i][tmp_v_id] = mem_tmp_v
+    #                         popu1['v_p_cost'][i][origin_v_id] -= popu1['c_rp'][j]
+    #                         popu1['v_m_cost'][i][origin_v_id] -= popu1['c_rm'][j]
+    #                         #
+    #                         popu1['h_p_cost'][i][tmp_h_id] = cpu_tmp_h
+    #                         popu1['h_m_cost'][i][tmp_h_id] = mem_tmp_h
+    #                         popu1['h_p_cost'][i][origin_h_id] -= popu1['v_rp'][tmp_v_id]
+    #                         popu1['h_m_cost'][i][origin_h_id] -= popu1['v_rm'][tmp_v_id]
+    #                         vm_used_id[tmp_v_id] = tmp_h_id                                                 # 并添加该组vm-hm映射到字典中
+    #                         flag = False                                                                    # 设置跳出while循环标志
+    #                         print "have migrate successfully!,i=%s,j=%s\n" %(i,j)
+    #                     else:
+    #                         tmp_v_id = (tmp_v_id + 1) % num_var                                             # 若不满足，则生成新的vm,hm重新进行while循环
+    #                         tmp_h_id = (tmp_h_id + 1) % num_var
+    #                 elif (tmp_v_id in vm_used_id):                                        # 若为容器进化的产生的vm，已经存在
+    #                     print tmp_v_id,'in',vm_used_id[tmp_v_id],cpu_tmp_v,mem_tmp_v,i,j
+    #                     if (cpu_tmp_v <= popu1['v_rp'][tmp_v_id] and mem_tmp_v <= popu1['v_rm'][tmp_v_id]):        # 并且满足资源约束，则直接将该vm与其对应的hm赋给容器
+    #                         origin_v_id = popu1['population'][i][j][0]
+    #                         popu1['population'][i][j] = [tmp_v_id,vm_used_id[tmp_v_id]]
+    #                         popu1['v_p_cost'][i][tmp_v_id] = cpu_tmp_v
+    #                         popu1['v_m_cost'][i][tmp_v_id] = mem_tmp_v
+    #                         popu1['v_p_cost'][i][origin_v_id] -= popu1['c_rp'][j]
+    #                         popu1['v_m_cost'][i][origin_v_id] -= popu1['c_rm'][j]
+    #                         flag = False                                                              # 并设置while 循环标志为False
+    #                         print "just find a serving vm-hm"
+    #                     else:                                                                          # 若不满足，则生成新的vm,hm重新进行while循环
+    #                         tmp_v_id = (tmp_v_id + 1) % num_var
+    #                         tmp_h_id = (tmp_h_id + 1) % num_var
+    # 尽量清零
+    for i in xrange(size):
+        for j in xrange(num_var):
+            if(popu1['v_p_cost'][i][j] < 0.0001):
+                popu1['v_p_cost'][i][j] = 0
+            elif(popu1['v_m_cost'][i][j] < 0.0001):
+                popu1['v_m_cost'][i][j] = 0
+            elif(popu1['h_p_cost'][i][j] < 0.0001):
+                popu1['h_p_cost'][i][j] = 0
+            elif(popu1['h_m_cost'][i][j] < 0.0001):
+                popu1['h_m_cost'][i][j] = 0
+    # 有效性检测
+    if checkeffective(popu1,size,num_var):
+        #print "it's effective, population = %s" %popu1['population']
+        print 'it is effective'
+        return popu1
+    else:
+        sys.exit("not effective in compute mbbode_migration")
 
 def mbbode_mutation(popu1,size,num_var,p_mutate):
     '''
     一旦被突变概率选中：则进行2个层次的突变——容器所在vm编号改变，vm所在的hm编号也在改变
     '''
+    print "开始突变"
     for i in xrange(size):
         for j in xrange(num_var):
             rand_sum = random.random()
             if (rand_sum < p_mutate):
+                print "进入突变"
                 tmp_v_id = random.randint(0,num_var-1)
                 tmp_h_id = random.randint(0,num_var-1)
                 while(True):
@@ -275,7 +529,7 @@ def mbbode_mutation(popu1,size,num_var,p_mutate):
                     mem_tmp_v = popu1['v_m_cost'][i][tmp_v_id] + popu1['c_rm'][j]
                     cpu_tmp_h = popu1['h_p_cost'][i][tmp_h_id] + popu1['v_rp'][tmp_v_id]
                     mem_tmp_h = popu1['h_m_cost'][i][tmp_h_id] + popu1['v_rm'][tmp_v_id]
-                    if(cpu_tmp_v <= popu1['v_rp'][tmp_v_id] and mem_tmp_v <= popu1['v_rm'][tmp_v_id] and cpu_tmp_h <= 1.0 and mem_tmp_h <= 1.0):                  # 若该vm重新安排至pm(tmp_position)后，cpu,mem资源使用量不超标，则进行替换;否则继续循环查找可容纳该vm的新pm
+                    if( cpu_tmp_h <= 1.0 and mem_tmp_h <= 1.0 and cpu_tmp_v <= popu1['v_rp'][tmp_v_id] and mem_tmp_v <= popu1['v_rm'][tmp_v_id]):                  # 若该vm重新安排至pm(tmp_position)后，cpu,mem资源使用量不超标，则进行替换;否则继续循环查找可容纳该vm的新pm
                         origin_v_id = popu1['population'][i][j][0]
                         origin_h_id = popu1['population'][i][j][1]
                         popu1['population'][i][j] = [tmp_v_id,tmp_h_id]           # 更改容器对vm的资源占用
@@ -304,11 +558,12 @@ def mbbode_mutation(popu1,size,num_var,p_mutate):
             elif(popu1['h_m_cost'][i][j] < 0.0001):
                 popu1['h_m_cost'][i][j] = 0
 
-    print popu1
+
     if checkeffective(popu1,size,num_var):
         #print "population = %s" %popu1['population']
         return popu1
     else:
+        print popu1
         sys.exit("not effective in compute mbbode_mutation")
 
 
