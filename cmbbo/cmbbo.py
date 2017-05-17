@@ -329,6 +329,8 @@ def fix_effective(popu1, size, num_var):
                     # continue
 
         # 对于超出hm约束的情况的fix
+        # ！！！！！！继续接着写面对hm超载时的处理情况
+        # 可能明天进行
         
     return True
 
