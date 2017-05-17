@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 #-*- coding:utf-8 -*-
 '''
-Created on 2017-4-12
-@author: Amy
+mbbo的算法函数
 '''
 import time
 import random
