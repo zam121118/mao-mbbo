@@ -529,7 +529,7 @@ def mbbode_rank(popu1, size, hsi_list):
     # 精英解选取与替换
     flag = False      # 代表是否满足hsi_list中每个HSI都比精英解对应的代价值小，True为是应该替换精英解
     for u in xrange(len(hsi_list)):
-        if popu1['elite_'+hsi_list[u]] > popu1[hsi_list[u]+'_cost']:
+        if popu1['elite_'+hsi_list[u]] > popu1[hsi_list[u]+'_cost'][rank]:
             flag = True
             continue
         else:
@@ -599,8 +599,9 @@ def main(generation, size, num_var, p, hsi_list):
         ## 获取全局最优解的能耗代价、负载均衡指数、以及迁移时间
         flag = False
         # 0,1,2,3分别对应着power、v_balance、h_balance、migration_time
-        for u in xrange(len(hsi_list)):
-            if elite_cost[u] > init_popu['elite_'+hsi_list[0]]:
+        count = 0
+        for u in hsi_list:
+            if elite_cost[count] > init_popu['elite_'+u]:
                 flag = True
                 continue
             else:
@@ -632,4 +633,4 @@ if __name__ == '__main__':
     hsi_list： 0,1,2,3分别对应着 power、v_balance、h_balance、migration_time
     请按顺序传参
     '''
-    main(100, 10, 100, 1.0, ['power'])
+    main(100, 10, 10, 1.0, ['power'])
