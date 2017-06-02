@@ -1,13 +1,10 @@
 #!/usr/bin/env python
 #-*- coding:utf-8 -*-
 '''
-Date : 2017-5-20
-@Author : Amy
-Change: 
-        现在更改mbbo用在Docker上的思路：
-obsolete ： 每次一旦被迁移率或者突变率选中，则一定选取满足约束条件的放置位置，
-now ：      直接进行突变以及迁移，只记录突变的位置，不进行实际资源占用以及约束解判断，
-            在进化n代之后进行无效解的判断，以及采用类BFD算法去影响最差解
+现在更改mbbo用在Docker上的思路：
+原来： 每次一旦被迁移率或者突变率选中，则一定选取满足约束条件的放置位置，
+现在： 直接进行突变以及迁移，只记录突变的位置，不进行实际资源占用以及约束解判断，
+      在进化n代之后进行无效解的判断，以及采用类BFD算法去影响最差解
 '''
 
 import time
@@ -17,6 +14,8 @@ import json
 import sys
 #from pyspark import SparkContext
 
+## 在整个代码中，一直重复遇到的问题：1. 每个vm到hm的映射应该是唯一的,不会出现 12-4, 12-17 并存的情况（已解决）
+## 2. 多个分布于同一hm的vm资源不应该超过hm资源约束
 
 def init_Docker(rp_u, rm_u, p, num_var):
     '''
@@ -149,7 +148,7 @@ def make_population(size, num_var, c_rp, c_rm, v_rp, v_rm, time_base): #    作�
         'power_cost': [x*0.0 for x in xrange(size)],              # list(size),记录当前代population中，每个chrom的能耗代价
         'v_balance_cost': [x*0.0 for x in xrange(size)],          # 计算现存与vm上的所有容器导致的均衡方差
         'h_balance_cost': [x*0.0 for x in xrange(size)],          # list(size),每个chrom中对hm的资源负载均衡指数
-        'migration_time_cost': [x*0.0 for x in xrange(size)],          # list(size),记录迁移时间，这里指定为固定值
+        'migration_time': [x*0.0 for x in xrange(size)],          # list(size),记录迁移时间，这里指定为固定值
         'rank': [x*0 for x in xrange(size)],                      # list(size),记录每个chrom排名，rank值越大，排名越靠后
         'elite_power': 999999.0*num_var,                          # float,记录每代种群中最优秀解的能耗代价值
         'elite_v_balance': 999999.0*num_var,                      # float,记录每代种群中最优秀解的vm层负载均衡方差
@@ -244,6 +243,7 @@ def mbbode_migration(popu1, size, num_var, f, lambdaa):
             popu1['h_m_cost'][i][j] = 0.00
     return popu1
 
+
 def mbbode_mutation(popu1, size, num_var, p_mutate):
     '''
     一旦被迁移概率选中：只记录突变后的vm,hm；不计算具体的vm,hm资源占用
@@ -262,14 +262,7 @@ def mbbode_mutation(popu1, size, num_var, p_mutate):
 
 def fix_effective(popu1, size, num_var):
     '''
-    判断候选解的有效性: 禁止出现vm-hm 一对多的情况， 若出现则强制处理
-    统计各vm被请求的cpu,mem资源
-    统计各hm被请求的cpu,mem资源（重点防止同一个vm被重复统计）
-    处理vm超载情况： 原则 —— 取出该vm上尺寸最小的容器，为其选择所有荷载的vm中资源使用最小的vm，若不引起超载则放入，
-                          否则新建vm，为该新vm选择荷载最小的hm直接(该hm是否超载由下一步处理)
-    处理hm超载情况： 原则 —— 取出该hm上最小的vm,选择荷载最小的hm，若放入该vm不会引起超载则放入，
-                          否则新建hm
-    注意： 调整vm，容器位置，引起的population变化，以及vm,hm被请求资源变化，应及时处理
+    判断候选解的有效性
     '''
     # print "进入fix_effective"
     # 先清空各vm,pm的资源使用率
@@ -280,14 +273,15 @@ def fix_effective(popu1, size, num_var):
             popu1['h_p_cost'][i][j] = 0
             popu1['h_m_cost'][i][j] = 0
 
-    # 对size个chrom，注意判断解合理性 vm-hm不存在一对多；再逐一对当前chrom进行约束判断，对于约束失败的直接进行fix
+    # 对size个chrom，注意判断解合理性vm-hm不存在一对多；再逐一对当前chrom进行约束判断，对于约束失败的直接进行fix
     for i in xrange(size):
-        # 以下所有的判断分别对每个chrom进行
+        ## 以下所有的判断分别对每个chrom进行
         vm_used_id = {}
         # 判断并更改使得解合理
         for j in xrange(num_var):                      # 容器编号
             v_id = popu1['population'][i][j][0]
             h_id = popu1['population'][i][j][1]
+
             # 判断vm-hm映射关系是否唯一，如果不唯一，那么选择vm已有的hm替换之
             if v_id in vm_used_id:
                 if h_id == vm_used_id[v_id]:           # 合理解
@@ -423,28 +417,83 @@ def fix_effective(popu1, size, num_var):
     return popu1
 
 
+# def mbbode_cost(popu1, size, num_var, time_base):
+#     '''
+#     首先计算本次迭代后实际vm,hm的资源占用情况，接着判断解的有效性
+#     对与不满足解的有效性：1. 同一个vm不可出现在不同hm上
+#                       2. 放于同一vm上的容器实际请求的vm cpu，mem资源不可超过vm尺寸
+#                       3. 放于hm上的vm不可超过hm实际尺寸
+#     '''
 
+#     # 首先，check_effective()进行解的有效性判断，对于无效解进行处理
+#     if not check_effective(popu1, size, num_var):
+#         fix_effective(popu1, size, num_var)
+
+#     # 再具体进行各项HSI的计算
+#     ## 计算能耗 —— 能耗计算，仅以hm实际被vm占用的cpu作为唯一参数进行计算
+#     for i in xrange(size):
+#         for j in xrange(num_var):
+#             x = popu1['h_p_cost'][i][j]
+#             if x > 0.0:
+#                 popu1['power_cost'][i] += (446.7 + 5.28*x - 0.04747*x*x + 0.000334*x*x*x)
+
+#     ## 计算负载均衡指数
+#     # 同时计算容器在vm上放置产生的负载均衡情况，以各vm的被容器请求的实际资源v_p_cost,v_m_cost为依据; 和vm在hm上产生的负载均衡情况，以h_p_cost,h_m_cost为计算依据
+#     for i in xrange(size):
+#         v_load_index = range(num_var)        # vm的负载均衡指数列表，每个chrom共num_var个（以容器实际使用vm的资源计算）
+#         v_average_load_index = 0.0
+#         h_load_index = range(num_var)        # hm的负载均衡指数列表，每个chrom共num_var个（以vm实际使用hm的资源计算）
+#         h_average_load_index = 0.0
+#         for j in xrange(num_var):         # vm的标号/hm的编号
+#             v_load_index[j] = 1.0 / (1.0005 - popu1['v_p_cost'][i][j]) / (1.0005 - popu1['v_m_cost'][i][j])
+#             v_average_load_index += v_load_index[j]
+#             h_load_index[j] = 1.0 / (1.0005 - popu1['h_p_cost'][i][j]) / (1.0005 - popu1['h_m_cost'][i][j])
+#             h_average_load_index += h_load_index[j]
+#         v_average_load_index /= num_var
+#         h_average_load_index /= num_var
+#         for j in xrange(num_var):        # 同时计算vm层、hm层的load-index方差，反映整体的分布情况
+#             popu1['v_balance_cost'][i] = popu1['v_balance_cost'][i] + (v_load_index[j] - v_average_load_index)*(v_load_index[j] - v_average_load_index)
+#             popu1['h_balance_cost'][i] = popu1['h_balance_cost'][i] + (h_load_index[j] - h_average_load_index)*(h_load_index[j] - h_average_load_index)
+#         popu1['v_balance_cost'][i] = math.sqrt(popu1['v_balance_cost'][i] / num_var)
+#         popu1['h_balance_cost'][i] = math.sqrt(popu1['h_balance_cost'][i] / num_var)
+
+#     ## 计算迁移时间 —— 由于容器是无状态迁移，所以不需要考虑容器的迁移时间，仅考虑虚拟机的迁移
+#     for i in xrange(size):
+#         a = dict(popu1['population'][i])                           # 进化后的(vm,hm)字典
+#         b = dict(popu1['init_save'][i])                            # 初始的(vm,hm)字典
+#         for x, y in a.items():
+#             if x in b and y != b[x]:            # 若x不在b,说明是进化后新建的;若a中没有的vm，有可能b有，那就是进化后删除了，或者b也没有;均不需要考虑迁移时间
+#                 popu1['migration_time'][i] += time_base
+
+#         # # # 剔除无效迁移  —— 在vm限定若干种尺寸规格的情况下，剔除无效迁移很必要——还没写完
+#         # for x,y in a.items():
+#         #     for l,m in b.items():
+#         #         if popu1['v_rp'][x] == popu1['v_rp'][l] and popu1['v_rm'][x] == popu1['v_rm'][l] and y == m:   # 两个vm尺寸相同，并且A的新hm是B的源hm,则B不动，A直接迁入B的新hm中
+#         #             a[x] = a[l]
+#         #             a[l] = m        # a[l] = (b[l] == m)                         # 如此更改不会影响到能耗，两层负载等的计算，只是减免1次迁移时间
+#         #             popu1['migration_time'][i] -= time_base
+#         #             print x,y,l,m,a,b
+#         #             print "find an invalid migration\n"
+#     return popu1
 def mbbode_cost(popu1, size, num_var, time_base):
     '''
     首先计算本次迭代后实际vm,hm的资源占用情况，接着判断解的有效性
     对与不满足解的有效性：1. 同一个vm不可出现在不同hm上
                       2. 放于同一vm上的容器实际请求的vm cpu，mem资源不可超过vm尺寸
                       3. 放于hm上的vm不可超过hm实际尺寸
-    使用fix_effective进行解修复
-    分别计算power_cost、v_balance_cost、h_balance_cost、migration_time_cost 4个代价
     '''
     # print "进入mbbode_cost"
-    # First, check_effective()进行解的有效性判断，对于无效解进行处理
+    # 首先，check_effective()进行解的有效性判断，对于无效解进行处理
     if not check_effective(popu1, size, num_var):
         popu1 = fix_effective(popu1, size, num_var)
 
-    # Then, 具体进行各项HSI的计算
+    # 再具体进行各项HSI的计算
     ## 计算能耗 —— 能耗计算，仅以hm实际被vm占用的cpu作为唯一参数进行计算
     for i in xrange(size):
-        popu1['power_cost'][i] = 0.0           # 每代种群都须清空代价重新计算
+        popu1['power_cost'][i] = 0.0           # 每代清空代价重新计算
         popu1['v_balance_cost'][i] = 0.0
         popu1['h_balance_cost'][i] = 0.0
-        popu1['migration_time_cost'][i] = 0.0
+        popu1['migration_time'][i] = 0.0
 
         v_load_index = range(num_var)        # vm的负载均衡指数列表，每个chrom共num_var个（以容器实际使用vm的资源计算）
         v_average_load_index = 0.0
@@ -478,7 +527,7 @@ def mbbode_cost(popu1, size, num_var, time_base):
         for x, y in a.items():
             if x in b and y != b[x]:            # 若x不在b,说明是进化后新建的;若a中没有的vm，有可能b有，那就是进化后删除了，或者b也没有;均不需要考虑迁移时间
                 # print "发现一个迁移的"
-                popu1['migration_time_cost'][i] += time_base
+                popu1['migration_time'][i] += time_base
 
         # # # 剔除无效迁移  —— 在vm限定若干种尺寸规格的情况下，剔除无效迁移很必要——还没写完
         # for x,y in a.items():
@@ -486,17 +535,16 @@ def mbbode_cost(popu1, size, num_var, time_base):
         #         if popu1['v_rp'][x] == popu1['v_rp'][l] and popu1['v_rm'][x] == popu1['v_rm'][l] and y == m:   # 两个vm尺寸相同，并且A的新hm是B的源hm,则B不动，A直接迁入B的新hm中
         #             a[x] = a[l]
         #             a[l] = m        # a[l] = (b[l] == m)                         # 如此更改不会影响到能耗，两层负载等的计算，只是减免1次迁移时间
-        #             popu1['migration_time_cost'][i] -= time_base
+        #             popu1['migration_time'][i] -= time_base
         #             print x,y,l,m,a,b
         #             print "find an invalid migration\n"
-    # print "本代代价结果：", popu1['power_cost'], popu1['v_balance_cost'], popu1['h_balance_cost'], popu1['migration_time_cost']
+    # print "本代代价结果：", popu1['power_cost'], popu1['v_balance_cost'], popu1['h_balance_cost'], popu1['migration_time']
 
     return popu1
 
-def mbbode_rank(popu1, size, hsi_list):
+def mbbode_rank(popu1, size):
     '''
-    rank计算：4个目标同时进行比较，（可以为每个目标设置权重表示该目标的重要性），选出在4个目标上权衡后最小的rank解
-    精英解判断： 由hsi_list传入需要作为精英解选取目标比较的列表，eg,[power,v_balance,h_balance,migration_time],可变化长度
+    4个目标同时进行比较，（可以为每个目标设置权重表示该目标的重要性）
     '''
     # print "进入mbbode_rank"
     # 非支配解排名在size个解之间
@@ -516,39 +564,28 @@ def mbbode_rank(popu1, size, hsi_list):
                 popu1['rank'][j] += 1
             elif popu1['h_balance_cost'][i] > popu1['h_balance_cost'][j]:
                 popu1['rank'][i] += 1
-            if popu1['migration_time_cost'][i] <= popu1['migration_time_cost'][j]:
+            if popu1['migration_time'][i] <= popu1['migration_time'][j]:
                 popu1['rank'][j] += 1
-            elif popu1['migration_time_cost'][i] > popu1['migration_time_cost'][j]:
+            elif popu1['migration_time'][i] > popu1['migration_time'][j]:
                 popu1['rank'][i] += 1
 
     # 寻找当前经过迁移突变后种群的排名rank最小值
     rank = popu1['rank'].index(min(popu1['rank']))
     # print popu1['rank'], rank
-    # print "上代结果：" , popu1['elite_power'], popu1['elite_v_balance'], popu1['elite_h_balance'], popu1['elite_migration_time_cost']
-
-    # 精英解选取与替换
-    flag = False      # 代表是否满足hsi_list中每个HSI都比精英解对应的代价值小，True为是应该替换精英解
-    for u in xrange(len(hsi_list)):
-        if popu1['elite_'+hsi_list[u]] > popu1[hsi_list[u]+'_cost']:
-            flag = True
-            continue
-        else:
-            flag = False
-            break
-    if flag:                        # 在hsi_list中记录的所有HSI上，精英解都不是小于本代代价解，执行精英解替换
-        popu1['elite_power'] = popu1['power_cost'][rank]
+    # print "上代结果：" , popu1['elite_power'], popu1['elite_v_balance'], popu1['elite_h_balance'], popu1['elite_migration_time']
+    if popu1['elite_power'] > popu1['power_cost'][rank]:# and popu1['elite_v_balance'] > popu1['v_balance_cost'][rank] and popu1['elite_h_balance'] > popu1['h_balance_cost'][rank]:
+        popu1['elite_power'] = popu1['power_cost'][rank]                        # 若当代rank最小的解优于上代保存的精英解，则替换精英解
         popu1['elite_v_balance'] = popu1['v_balance_cost'][rank]
         popu1['elite_h_balance'] = popu1['h_balance_cost'][rank]
-        popu1['elite_migration_time'] = popu1['migration_time_cost'][rank]
+        popu1['elite_migration_time'] = popu1['migration_time'][rank]
         popu1['elite_chrom'] = popu1['population'][rank][:]
-        # print "本代结果替代后：" , popu1['elite_power'], popu1['elite_v_balance'], popu1['elite_h_balance'], popu1['elite_migration_time_cost']        
-    else:
-        popu1['population'][0] = popu1['elite_chrom'][:]       # 若精英解仍旧最优，则用上代精英解随机替换当代的size=0 的候选解
-
+        # print "本代结果替代后：" , popu1['elite_power'], popu1['elite_v_balance'], popu1['elite_h_balance'], popu1['elite_migration_time']
+    else:                                                                       # 若精英解仍旧最优，则用上代精英解随机替换当代的size=0 的候选解
+        popu1['population'][0] = popu1['elite_chrom'][:]
     return popu1
 
 
-def main(generation, size, num_var, p, hsi_list):
+def main(generation, size, num_var, p):
     '''
     主程序流程：初代解-代价计算-排名-迁移-突变-代价计算-排名-精英解替换-继续迭代
     主要算法参数：
@@ -578,12 +615,12 @@ def main(generation, size, num_var, p, hsi_list):
     init_popu = make_population(size, num_var, c_rp, c_rm, v_rp, v_rm, time_base)
     init_popu = initialize_population(init_popu, size, num_var)
     init_popu = mbbode_cost(init_popu, size, num_var, time_base)
-    init_popu = mbbode_rank(init_popu, size, hsi_list)
+    init_popu = mbbode_rank(init_popu, size)
 
     # 随机保存一个初代候选解
     tmp = random.randint(0, size-1)                                # 从每个群岛的population中size个随机选出第tmp各解
     save_chrom = init_popu['population'][tmp]                      # 随机挑选的第tmp个初始候选解，代表MBBO执行前vm-hm拓扑关系
-    save_cost = (init_popu['power_cost'][tmp], init_popu['v_balance_cost'][tmp], init_popu['h_balance_cost'][tmp], init_popu['migration_time_cost'][tmp])                                               # 第tmp个初始候选解的3个HSI代价值
+    save_cost = (init_popu['power_cost'][tmp], init_popu['v_balance_cost'][tmp], init_popu['h_balance_cost'][tmp], init_popu['migration_time'][tmp])                                               # 第tmp个初始候选解的3个HSI代价值
 
     elite_cost = [9999.9*num_var, 9999.9*num_var, 9999.9*num_var, time_base*num_var]   # 初设的全局精英解能耗代价、负载均衡方差、迁移时间
     save_elite_cost = [0, 0, 0, 0]                                 # 用于保存每一代的全局最优解，并在新的一代时比较有否变化，只有改变后才会打印，否则不打印
@@ -594,23 +631,14 @@ def main(generation, size, num_var, p, hsi_list):
         init_popu = mbbode_migration(init_popu, size, num_var, f, lambdaa)
         init_popu = mbbode_mutation(init_popu, size, num_var, p_mutate)
         init_popu = mbbode_cost(init_popu, size, num_var, time_base)
-        init_popu = mbbode_rank(init_popu, size, hsi_list)
+        init_popu = mbbode_rank(init_popu, size)
 
         ## 获取全局最优解的能耗代价、负载均衡指数、以及迁移时间
-        flag = False
-        # 0,1,2,3分别对应着power、v_balance、h_balance、migration_time
-        for u in xrange(len(hsi_list)):
-            if elite_cost[u] > init_popu['elite_'+hsi_list[0]]:
-                flag = True
-                continue
-            else:
-                flag = False
-                break
-        if flag:
-            elite_cost[0] = init_popu['elite_'+hsi_list[0]]
-            elite_cost[1] = init_popu['elite_'+hsi_list[1]]
-            elite_cost[2] = init_popu['elite_'+hsi_list[2]]
-            elite_cost[3] = init_popu['elite_'+hsi_list[3]]
+        if elite_cost[0] > init_popu['elite_power']:# and elite_cost[1] > init_popu['elite_v_balance'] and elite_cost[2] > init_popu['elite_h_balance']:
+            elite_cost[0] = init_popu['elite_power']
+            elite_cost[1] = init_popu['elite_v_balance']
+            elite_cost[2] = init_popu['elite_h_balance']
+            elite_cost[3] = init_popu['elite_migration_time']
             # print "执行全局精英解替换"
 
         # 记录每次迭代 改变的 全局最优解值
@@ -628,8 +656,4 @@ def main(generation, size, num_var, p, hsi_list):
     print init_popu
 
 if __name__ == '__main__':
-    '''
-    hsi_list： 0,1,2,3分别对应着 power、v_balance、h_balance、migration_time
-    请按顺序传参
-    '''
-    main(100, 10, 100, 1.0, ['power'])
+    main(1000, 10, 200, 1.0)
