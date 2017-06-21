@@ -15,6 +15,7 @@ import random
 import math
 import json
 import sys
+import copy
 #from pyspark import SparkContext
 
 
@@ -585,8 +586,10 @@ def main(generation, size, num_var, p, hsi_list):
     save_chrom = init_popu['population'][tmp]                      # 随机挑选的第tmp个初始候选解，代表MBBO执行前vm-hm拓扑关系
     save_cost = (init_popu['power_cost'][tmp], init_popu['v_balance_cost'][tmp], init_popu['h_balance_cost'][tmp], init_popu['migration_time_cost'][tmp])                                               # 第tmp个初始候选解的3个HSI代价值
 
-    elite_cost = [9999.9*num_var, 9999.9*num_var, 9999.9*num_var, time_base*num_var]   # 初设的全局精英解能耗代价、负载均衡方差、迁移时间
-    save_elite_cost = [0, 0, 0, 0]                                 # 用于保存每一代的全局最优解，并在新的一代时比较有否变化，只有改变后才会打印，否则不打印
+    # 初设的全局精英解能耗代价、负载均衡方差、迁移时间
+    elite_cost = {'power': 9999.9*num_var, 'v_balance': 9999.9*num_var, 'h_balance': 9999.9*num_var, 'migration_time': time_base*num_var}
+    # 用于保存每一代的全局最优解，并在新的一代时比较有否变化，只有改变后才会打印，否则不打印
+    save_elite_cost = {'power': 0, 'v_balance': 0, 'h_balance': 0, 'migration_time': 0}
     time1 = time.time()                                            # 算法迭代进化开始时间戳
 
     ## 开始种群迭代进化
@@ -598,26 +601,24 @@ def main(generation, size, num_var, p, hsi_list):
 
         ## 获取全局最优解的能耗代价、负载均衡指数、以及迁移时间
         flag = False
-        # 0,1,2,3分别对应着power、v_balance、h_balance、migration_time
-        count = 0
         for u in hsi_list:
-            if elite_cost[count] > init_popu['elite_'+u]:
+            if elite_cost[u] > init_popu['elite_'+u]:
                 flag = True
                 continue
             else:
                 flag = False
                 break
         if flag:
-            elite_cost[0] = init_popu['elite_'+hsi_list[0]]
-            elite_cost[1] = init_popu['elite_'+hsi_list[1]]
-            elite_cost[2] = init_popu['elite_'+hsi_list[2]]
-            elite_cost[3] = init_popu['elite_'+hsi_list[3]]
+            elite_cost['power'] = init_popu['elite_power']
+            elite_cost['v_balance'] = init_popu['elite_v_balance']
+            elite_cost['h_balance'] = init_popu['elite_h_balance']
+            elite_cost['migration_time'] = init_popu['elite_migration_time']
             # print "执行全局精英解替换"
 
         # 记录每次迭代 改变的 全局最优解值
-        if save_elite_cost[0] != elite_cost[0] or save_elite_cost[1] != elite_cost[1] or save_elite_cost[2] != elite_cost[2] or save_elite_cost[3] != elite_cost[3]:
-            print "执行全局精英解替换：", elite_cost[0], elite_cost[1], elite_cost[2], elite_cost[3]
-            save_elite_cost = elite_cost[:]
+        if save_elite_cost['power'] != elite_cost['power'] or save_elite_cost['v_balance'] != elite_cost['v_balance'] or save_elite_cost['h_balance'] != elite_cost['h_balance'] or save_elite_cost['migration_time'] != elite_cost['migration_time']:
+            print "执行全局精英解替换：", elite_cost
+            save_elite_cost = copy.deepcopy(elite_cost)      # Python 深拷贝
 
     # 结果展示
     time2 = time.time()
@@ -626,11 +627,11 @@ def main(generation, size, num_var, p, hsi_list):
     elite_chrom = dict(init_popu['elite_chrom'])
     print 'the init chrom maybe is %s, use %s pms, the cost is %s' %(save_chrom, len(set(save_chrom.values())), save_cost)
     print 'after mbbo, chrom is %s, use %s pms' %(elite_chrom, len(set(elite_chrom.values()))), '\n', elite_cost
-    print init_popu
+    # print init_popu
 
 if __name__ == '__main__':
     '''
     hsi_list： 0,1,2,3分别对应着 power、v_balance、h_balance、migration_time
     请按顺序传参
     '''
-    main(100, 10, 10, 1.0, ['power'])
+    main(100, 10, 100, 1.0, ['power','v_balance'])

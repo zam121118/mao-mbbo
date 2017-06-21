@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 #-*- coding:utf-8 -*-
 '''
-记录最原始的cmbbo算法，相当于测试版 2017-6-4
-
 现在更改mbbo用在Docker上的思路：
 原来： 每次一旦被迁移率或者突变率选中，则一定选取满足约束条件的放置位置，
 现在： 直接进行突变以及迁移，只记录突变的位置，不进行实际资源占用以及约束解判断，
@@ -14,7 +12,6 @@ import random
 import math
 import json
 import sys
-import copy
 #from pyspark import SparkContext
 
 ## 在整个代码中，一直重复遇到的问题：1. 每个vm到hm的映射应该是唯一的,不会出现 12-4, 12-17 并存的情况（已解决）
@@ -28,7 +25,7 @@ def init_Docker(rp_u, rm_u, p, num_var):
     p代表虚拟机的cpu和mem两种资源之间的相关系数，负责控制每台虚拟机对两种资源需求的关联程度
     num_var是需要生成的虚拟机个数
     '''
-    print "进入 init_Docker"
+    # print "进入 init_Docker"
     c_rp = range(num_var)                                                  # 记录每个虚拟机cpu,mem请求量
     c_rm = range(num_var)
     for i in range(num_var):
@@ -51,7 +48,7 @@ def init_VM(c_rp, c_rm, rp_option, rm_option, num_var):
     num_var是容器个数，初始假设vm个数等于docker个数
     返回：虚拟机的num_var个尺寸元组序列
     '''
-    print "进入init_VM"
+    # print "进入init_VM"
     v_rp = []
     v_rm = []
     i = 0
@@ -86,7 +83,7 @@ def check_effective(popu1, size, num_var):
     '''
     判断候选解的有效性
     '''
-    print "进入check_effective"
+    # print "进入check_effective"
     # 先清空各vm,pm的资源使用率
     for i in xrange(size):
         for j in xrange(num_var):
@@ -104,7 +101,7 @@ def check_effective(popu1, size, num_var):
                 if h_id == vm_used_id[v_id]:           # 且所在的hm与安排过的hm相同，则跳过该次循环，不需要重新计算资源占用
                     continue
                 else:                                  # 若hm不同于安排的hm编号，说明出现同一个vm映射到不同hm的错误，直接返回
-                    print "in this chrom %s, a vm has been hosted on different hm, totally wrong!! " %popu1['population'][i]
+                    # print "in this chrom %s, a vm has been hosted on different hm, totally wrong!! " %popu1['population'][i]
                     return False
             else:                                      # 其他情况包括,包括多vm映射到1个hm,按正常情况计算
                 popu1['v_p_cost'][i][v_id] += popu1['c_rp'][j]
@@ -118,7 +115,7 @@ def check_effective(popu1, size, num_var):
                 # print popu1['v_m_cost'][i][x], popu1['v_rm'][x]
                 # print popu1['h_p_cost'][i][x]
                 # print popu1['h_m_cost'][i][x]
-                print "find a error: VM or hm has overhold" , popu1['population'][i], x, vm_used_id, '\n'
+                # print "find a error: VM or hm has overhold" , popu1['population'][i], x, vm_used_id, '\n'
                 return False
     return True
 
@@ -136,7 +133,7 @@ def make_population(size, num_var, c_rp, c_rm, v_rp, v_rm, time_base): #    作�
     '''
     构造一个population，包含size个候选解chrom,每个chrom是num_var个分别记录该容器所在的vm和hm编号的元组
     '''
-    print "进入make_population"
+    # print "进入make_population"
     population0 = {
         'c_rp': c_rp,                                             # 每个容器的cpu请求
         'c_rm': c_rm,                                             # 每个容器的mem请求
@@ -166,7 +163,7 @@ def initialize_population(popu1, size, num_var):
     '''
     初始化docker容器放置的vm编号，以及vm所能放置的hm编号，并计算初代种群的各项数值
     '''
-    print "进入initialize_population"
+    # print "进入initialize_population"
     # 为所有容器选择能够容纳其尺寸的vm_id
     for i in xrange(size):
         # 记录每个chrom中，vm-hm的映射，保证映射在相同vm的不同容器，所在的hm也相同
@@ -205,7 +202,7 @@ def initialize_population(popu1, size, num_var):
     for i in xrange(size):
         popu1['init_save'][i] = popu1['population'][i][:]
     if check_effective(popu1, size, num_var):
-        print "Initailization population is effective"
+        # print "Initailization population is effective"
         return popu1
     else:
         sys.exit("failed in initializating population")
@@ -215,7 +212,7 @@ def mbbode_migration(popu1, size, num_var, f, lambdaa):
     '''
     一旦被迁移概率选中：只进行记录被迁移影响后的解位置，不计算具体的vm被请求的cpu,mem以及hm被请求的cpu,mem
     '''
-    print "进入mbbode_migration"
+    # print "进入mbbode_migration"
     for i in xrange(size):
         for j in xrange(num_var):
             rand_sum = random.random()
@@ -251,7 +248,7 @@ def mbbode_mutation(popu1, size, num_var, p_mutate):
     '''
     一旦被迁移概率选中：只记录突变后的vm,hm；不计算具体的vm,hm资源占用
     '''
-    print "进入mbbode_mutation"
+    # print "进入mbbode_mutation"
     for i in xrange(size):
         for j in xrange(num_var):
             rand_sum = random.random()
@@ -267,7 +264,7 @@ def fix_effective(popu1, size, num_var):
     '''
     判断候选解的有效性
     '''
-    print "进入fix_effective"
+    # print "进入fix_effective"
     # 先清空各vm,pm的资源使用率
     for i in xrange(size):
         for j in xrange(num_var):
@@ -291,28 +288,27 @@ def fix_effective(popu1, size, num_var):
                     continue
                 # 说明解中j容器的vm实际上已经存在其他hm上了，解无效；下面给出办法化为有效解：强制将其hm改为字典记录的vm:hm
                 else:
-                    print "ops, a vm has been hosted on different hm, totally wrong!! fixing"
+                    # print "ops, a vm has been hosted on different hm, totally wrong!! fixing"
                     popu1['population'][i][j] = [v_id, vm_used_id[v_id]]
             # 新建vm:hm直接加入字典
             else:
                 vm_used_id[v_id] = h_id
 
         # 统计资源
-        # ## HM资源占用以vm_used_id作为基准
+        ## HM资源占用以vm_used_id作为基准
         for v_id, h_id in vm_used_id.items():
             popu1['h_p_cost'][i][h_id] += popu1['v_rp'][v_id]
             popu1['h_m_cost'][i][h_id] += popu1['v_rm'][v_id]
         ## vm资源占用按照逐个容器去统计
-        v_back1 = copy.deepcopy(vm_used_id)
         for x in xrange(num_var):               # 容器编号
             v_id = popu1['population'][i][x][0]
             popu1['v_p_cost'][i][v_id] += popu1['c_rp'][x]
             popu1['v_m_cost'][i][v_id] += popu1['c_rm'][x]
 
         # 对于超出vm约束的情况的fix
-        for index in xrange(num_var):          # vm编号
+        for index in xrange(num_var):
             if popu1['v_p_cost'][i][index] > popu1['v_rp'][index] or popu1['v_m_cost'][i][index] > popu1['v_rm'][index]:
-                print "修改vm超载的情况", "v_id = {a}, v_p_cost = {b}, v_rp = {c}, v_m_cost = {d}, v_rm = {e}".format(a=index, b=popu1['v_p_cost'][i][index], c=popu1['v_rp'][index], d=popu1['v_m_cost'][i][index], e=popu1['v_rm'][index])
+                # print "修改vm超载的情况",index,popu1['v_p_cost'][i][index],popu1['v_rp'][index]
 
                 # 说明index号vm有问题，遍历size编号为i的chrom，查找index vm上的所有容器编号
                 containers = [a for a, b in enumerate(popu1['population'][i]) if b[0] == index]
@@ -323,9 +319,9 @@ def fix_effective(popu1, size, num_var):
                     c = containers[ids.index(min(ids))]
                     popu1['v_p_cost'][i][index] -= popu1['c_rp'][c]
                     popu1['v_m_cost'][i][index] -= popu1['c_rm'][c]
-                    print "取出{c}前有这些容器：".format(c=c), containers
+                    # print c, containers
                     containers.remove(c)            # 已经拿出的容器要及时删除
-                    print "取出{c}后有：".format(c=c), containers, "v_p_cost={a}, v_rp = {b}, v_m_cost = {c}, v_rm = {d}".format(a=popu1['v_p_cost'][i][index], b=popu1['v_rp'][index], c=popu1['v_m_cost'][i][index], d=popu1['v_rm'][index])
+                    # print c, containers
 
                     # 在资源使用大于0.00的vm中，寻找可容纳容器c的vm
                     # 所有非空vm的字典
@@ -350,14 +346,11 @@ def fix_effective(popu1, size, num_var):
                                 try:
                                     min_h = tmp_h[min(tmp_h.keys())]   # 资源使用最少的hm编号
                                 except ValueError:
-                                    print "hm代价统计异常",popu1['h_p_cost'][i]
+                                    # print "hm代价统计异常",popu1['h_p_cost'][i]
                                     sys.exit(0)
                                 popu1['population'][i][c] = [location, min_h]
                                 popu1['h_p_cost'][i][min_h] += popu1['v_rp'][location]
                                 popu1['h_m_cost'][i][min_h] += popu1['v_rm'][location]
-                                if location in vm_used_id and min_h != vm_used_id[location]:
-                                    popu1['h_p_cost'][i][vm_used_id[location]] -= popu1['v_rp'][location]
-                                    popu1['h_m_cost'][i][vm_used_id[location]] -= popu1['v_rm'][location]
                                 vm_used_id[location] = min_h     # 该次vm-hm放入vm_used_id中记录
                                 break
 
@@ -365,26 +358,21 @@ def fix_effective(popu1, size, num_var):
                     if popu1['v_p_cost'][i][index] <= popu1['v_rp'][index] and popu1['v_m_cost'][i][index] <= popu1['v_rm'][index]:
                         break
                     # 否则，继续while循环取次小的容器，并选择放置
-        v_back2 = copy.deepcopy(vm_used_id)
 
         # 对于超出hm约束的情况的fix
-        for index in xrange(num_var):          # hm编号
+        for index in xrange(num_var):
             if popu1['h_p_cost'][i][index] > 1.0 or popu1['h_m_cost'][i][index] > 1.0:
-                print "修改hm过载 ", "h_id = {a}, h_p_cost = {b}, h_m_cost = {c}".format(a=index, b=popu1['h_p_cost'][i][index], c=popu1['h_m_cost'][i][index])
+                # print "过载的hm编号是： ",index
                 # 说明index号hm有问题，根据之前记录的字典vm_used_id放于该hm上vms的编号
                 vms = [v for v, h in vm_used_id.items() if h == index]
-                print "该物理机上放置的虚拟机为： ",vms
+                # print "该物理机上放置的虚拟机为： ",vms
                 # 一定要找到符合资源约束的方案，否则持续循环
                 while True:
                     # 找到尺寸最小的vm，并迁出
-                    print "该物理机上的虚拟机对应cpu尺寸{cpu},mem尺寸{mem}".format(cpu=[popu1['v_rp'][v] for v in vms],mem=[popu1['v_rm'][v] for v in vms])
+                    # print "该物理机上的虚拟机：",[popu1['v_rp'][v] for v in vms]
                     ids = [popu1['v_rp'][v] for v in vms]
-                    try:
-                        v = vms[ids.index(min(ids))]
-                    except ValueError:
-                        print "hm代价统计有异常", index, vm_used_id, v_back1, v_back2
-                        sys.exit(0)
-                    print v
+                    v = vms[ids.index(min(ids))]
+                    # print v
                     popu1['h_p_cost'][i][index] -= popu1['v_rp'][v]
                     popu1['h_m_cost'][i][index] -= popu1['v_rm'][v]
                     vms.remove(v)            # 已经拿出的vm要及时删除
@@ -420,7 +408,6 @@ def fix_effective(popu1, size, num_var):
                                 # 修改资源
                                 popu1['h_p_cost'][i][location] += popu1['v_rp'][v]
                                 popu1['h_m_cost'][i][location] += popu1['v_rm'][v]
-                                vm_used_id[v] = location
                                 break
 
                     # 若拿出vm v后, hm_index不再超载，则退出，检查下一个hm
@@ -429,65 +416,6 @@ def fix_effective(popu1, size, num_var):
                     # 否则继续while循环，取出次小的vm
     return popu1
 
-
-# def mbbode_cost(popu1, size, num_var, time_base):
-#     '''
-#     首先计算本次迭代后实际vm,hm的资源占用情况，接着判断解的有效性
-#     对与不满足解的有效性：1. 同一个vm不可出现在不同hm上
-#                       2. 放于同一vm上的容器实际请求的vm cpu，mem资源不可超过vm尺寸
-#                       3. 放于hm上的vm不可超过hm实际尺寸
-#     '''
-
-#     # 首先，check_effective()进行解的有效性判断，对于无效解进行处理
-#     if not check_effective(popu1, size, num_var):
-#         fix_effective(popu1, size, num_var)
-
-#     # 再具体进行各项HSI的计算
-#     ## 计算能耗 —— 能耗计算，仅以hm实际被vm占用的cpu作为唯一参数进行计算
-#     for i in xrange(size):
-#         for j in xrange(num_var):
-#             x = popu1['h_p_cost'][i][j]
-#             if x > 0.0:
-#                 popu1['power_cost'][i] += (446.7 + 5.28*x - 0.04747*x*x + 0.000334*x*x*x)
-
-#     ## 计算负载均衡指数
-#     # 同时计算容器在vm上放置产生的负载均衡情况，以各vm的被容器请求的实际资源v_p_cost,v_m_cost为依据; 和vm在hm上产生的负载均衡情况，以h_p_cost,h_m_cost为计算依据
-#     for i in xrange(size):
-#         v_load_index = range(num_var)        # vm的负载均衡指数列表，每个chrom共num_var个（以容器实际使用vm的资源计算）
-#         v_average_load_index = 0.0
-#         h_load_index = range(num_var)        # hm的负载均衡指数列表，每个chrom共num_var个（以vm实际使用hm的资源计算）
-#         h_average_load_index = 0.0
-#         for j in xrange(num_var):         # vm的标号/hm的编号
-#             v_load_index[j] = 1.0 / (1.0005 - popu1['v_p_cost'][i][j]) / (1.0005 - popu1['v_m_cost'][i][j])
-#             v_average_load_index += v_load_index[j]
-#             h_load_index[j] = 1.0 / (1.0005 - popu1['h_p_cost'][i][j]) / (1.0005 - popu1['h_m_cost'][i][j])
-#             h_average_load_index += h_load_index[j]
-#         v_average_load_index /= num_var
-#         h_average_load_index /= num_var
-#         for j in xrange(num_var):        # 同时计算vm层、hm层的load-index方差，反映整体的分布情况
-#             popu1['v_balance_cost'][i] = popu1['v_balance_cost'][i] + (v_load_index[j] - v_average_load_index)*(v_load_index[j] - v_average_load_index)
-#             popu1['h_balance_cost'][i] = popu1['h_balance_cost'][i] + (h_load_index[j] - h_average_load_index)*(h_load_index[j] - h_average_load_index)
-#         popu1['v_balance_cost'][i] = math.sqrt(popu1['v_balance_cost'][i] / num_var)
-#         popu1['h_balance_cost'][i] = math.sqrt(popu1['h_balance_cost'][i] / num_var)
-
-#     ## 计算迁移时间 —— 由于容器是无状态迁移，所以不需要考虑容器的迁移时间，仅考虑虚拟机的迁移
-#     for i in xrange(size):
-#         a = dict(popu1['population'][i])                           # 进化后的(vm,hm)字典
-#         b = dict(popu1['init_save'][i])                            # 初始的(vm,hm)字典
-#         for x, y in a.items():
-#             if x in b and y != b[x]:            # 若x不在b,说明是进化后新建的;若a中没有的vm，有可能b有，那就是进化后删除了，或者b也没有;均不需要考虑迁移时间
-#                 popu1['migration_time'][i] += time_base
-
-#         # # # 剔除无效迁移  —— 在vm限定若干种尺寸规格的情况下，剔除无效迁移很必要——还没写完
-#         # for x,y in a.items():
-#         #     for l,m in b.items():
-#         #         if popu1['v_rp'][x] == popu1['v_rp'][l] and popu1['v_rm'][x] == popu1['v_rm'][l] and y == m:   # 两个vm尺寸相同，并且A的新hm是B的源hm,则B不动，A直接迁入B的新hm中
-#         #             a[x] = a[l]
-#         #             a[l] = m        # a[l] = (b[l] == m)                         # 如此更改不会影响到能耗，两层负载等的计算，只是减免1次迁移时间
-#         #             popu1['migration_time'][i] -= time_base
-#         #             print x,y,l,m,a,b
-#         #             print "find an invalid migration\n"
-#     return popu1
 def mbbode_cost(popu1, size, num_var, time_base):
     '''
     首先计算本次迭代后实际vm,hm的资源占用情况，接着判断解的有效性
@@ -495,7 +423,7 @@ def mbbode_cost(popu1, size, num_var, time_base):
                       2. 放于同一vm上的容器实际请求的vm cpu，mem资源不可超过vm尺寸
                       3. 放于hm上的vm不可超过hm实际尺寸
     '''
-    print "进入mbbode_cost"
+    # print "进入mbbode_cost"
     # 首先，check_effective()进行解的有效性判断，对于无效解进行处理
     if not check_effective(popu1, size, num_var):
         popu1 = fix_effective(popu1, size, num_var)
@@ -559,7 +487,7 @@ def mbbode_rank(popu1, size):
     '''
     4个目标同时进行比较，（可以为每个目标设置权重表示该目标的重要性）
     '''
-    print "进入mbbode_rank"
+    # print "进入mbbode_rank"
     # 非支配解排名在size个解之间
     for i in xrange(size):
         popu1['rank'][i] = 0
@@ -584,15 +512,16 @@ def mbbode_rank(popu1, size):
 
     # 寻找当前经过迁移突变后种群的排名rank最小值
     rank = popu1['rank'].index(min(popu1['rank']))
-    print popu1['rank'], rank
-    print "上代结果：" , popu1['elite_power'], popu1['elite_v_balance'], popu1['elite_h_balance'], popu1['elite_migration_time']
-    if popu1['elite_power'] > popu1['power_cost'][rank]:# and popu1['elite_v_balance'] > popu1['v_balance_cost'][rank] and popu1['elite_h_balance'] > popu1['h_balance_cost'][rank]:
+    # print popu1['rank'], rank
+    # print "上代结果：" , popu1['elite_power'], popu1['elite_v_balance'], popu1['elite_h_balance'], popu1['elite_migration_time']
+    # if popu1['elite_power'] > popu1['power_cost'][rank] and popu1['elite_v_balance'] > popu1['v_balance_cost'][rank] and popu1['elite_h_balance'] > popu1['h_balance_cost'][rank]:
+    if popu1['elite_v_balance'] > popu1['v_balance_cost'][rank]:# and popu1['elite_h_balance'] > popu1['h_balance_cost'][rank]:
         popu1['elite_power'] = popu1['power_cost'][rank]                        # 若当代rank最小的解优于上代保存的精英解，则替换精英解
         popu1['elite_v_balance'] = popu1['v_balance_cost'][rank]
         popu1['elite_h_balance'] = popu1['h_balance_cost'][rank]
         popu1['elite_migration_time'] = popu1['migration_time'][rank]
         popu1['elite_chrom'] = popu1['population'][rank][:]
-        print "本代结果替代后：" , popu1['elite_power'], popu1['elite_v_balance'], popu1['elite_h_balance'], popu1['elite_migration_time']
+        # print "本代结果替代后：" , popu1['elite_power'], popu1['elite_v_balance'], popu1['elite_h_balance'], popu1['elite_migration_time']
     else:                                                                       # 若精英解仍旧最优，则用上代精英解随机替换当代的size=0 的候选解
         popu1['population'][0] = popu1['elite_chrom'][:]
     return popu1
@@ -614,14 +543,12 @@ def main(generation, size, num_var, p):
     rm_u = 0.25                            # 容器请求MEM的指导变量
     p = p                                  # 控制容器cpu,mem的资源相关度
     time_base = 65                         # 单台vm迁移的基准时间（实际上不对，因为vm的mem尺寸不一样，基数也应该不一样）
-    rp_option = [0.3, 0.5, 0.7, 1.0]                      # vm可选的cpu尺寸
-    rm_option = [0.3, 0.5, 0.7, 1.0]                      # vm可选的mem尺寸
+    rp_option = [1.0]                      # vm可选的cpu尺寸
+    rm_option = [1.0]                      # vm可选的mem尺寸
 
     # 2.初始化num_var个容器和vm，以及计算迁移率
     c_rp, c_rm = init_Docker(rp_u, rm_u, p, num_var)
-    print c_rp, c_rm
     v_rp, v_rm = init_VM(c_rp, c_rm, rp_option, rm_option, num_var)
-    print v_rp, v_rm
     lambdaa, mu = migrate_Rate(size)
 
     print "开始主流程"
@@ -649,7 +576,8 @@ def main(generation, size, num_var, p):
         init_popu = mbbode_rank(init_popu, size)
 
         ## 获取全局最优解的能耗代价、负载均衡指数、以及迁移时间
-        if elite_cost[0] > init_popu['elite_power']:# and elite_cost[1] > init_popu['elite_v_balance'] and elite_cost[2] > init_popu['elite_h_balance']:
+        # if elite_cost[0] > init_popu['elite_power'] and elite_cost[1] > init_popu['elite_v_balance'] and elite_cost[2] > init_popu['elite_h_balance']:
+        if elite_cost[1] > init_popu['elite_v_balance']:# and elite_cost[2] > init_popu['elite_h_balance']:
             elite_cost[0] = init_popu['elite_power']
             elite_cost[1] = init_popu['elite_v_balance']
             elite_cost[2] = init_popu['elite_h_balance']
@@ -668,7 +596,7 @@ def main(generation, size, num_var, p):
     elite_chrom = dict(init_popu['elite_chrom'])
     print 'the init chrom maybe is %s, use %s pms, the cost is %s' %(save_chrom, len(set(save_chrom.values())), save_cost)
     print 'after mbbo, chrom is %s, use %s pms' %(elite_chrom, len(set(elite_chrom.values()))), '\n', elite_cost
-    print init_popu
+    # print init_popu
 
 if __name__ == '__main__':
-    main(200, 5, 50, 1.0)
+    main(1000, 10, 200, 1.0)
