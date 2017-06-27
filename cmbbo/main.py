@@ -433,6 +433,8 @@ def mbbode_cost(popu1, size, num_var, time_base):
                       3. 放于hm上的vm不可超过hm实际尺寸
     使用fix_effective进行解修复
     分别计算power_cost、v_balance_cost、h_balance_cost、migration_time_cost 4个代价
+    !!!有时间得更改下v_balance_cost、h_balance_cost计算负载均衡方差的方法
+    !!!（必须剔除没有在运行的vm,hm对应的load index解决方差值非常大问题）
     '''
     # print "进入mbbode_cost"
     # First, check_effective()进行解的有效性判断，对于无效解进行处理
