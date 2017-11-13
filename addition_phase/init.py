@@ -86,7 +86,6 @@ def make_population(size, num_var, c_rp, c_rm, v_rp, v_rm): #    作为全局变
         'v_rp': v_rp,                                             # 每个vm的cpu请求
         'v_rm': v_rm,                                             # 每个vm的mem请求
         'population': range2rect(size, num_var, [0, 0]),          # size个chrom，每个chrom有num_var个双元素list[vm,hm]对应每个容器放置的vm编号和物理机编号
-        'init_save': range2rect(size, num_var, [0, 0]),           # 保存初始size个chroms
         'v_p_cost': range2rect(size, num_var, 0.0),               # size个num_var长list记录每个vm上所有容器的cpu总请求,初始为0
         'v_m_cost': range2rect(size, num_var, 0.0),               # 每个vm被容器请求的mem，初始为0
         'h_p_cost': range2rect(size, num_var, 0.0),               # 每个HM被请求的cpu，初始为0
@@ -142,6 +141,7 @@ def initialize_population(popu1, size, num_var):
         sys.exit("failed in initializating population")
         
 def check_effective(popu1, size, num_var):
+
     '''
     判断候选解的有效性
     '''
@@ -173,16 +173,24 @@ def check_effective(popu1, size, num_var):
                 vm_used_id[v_id] = h_id
         for x in xrange(num_var):                      # 只要超出资源限约束，即报错
             if popu1['v_p_cost'][i][x] > popu1['v_rp'][x] or popu1['v_m_cost'][i][x] > popu1['v_rm'][x] or popu1['h_p_cost'][i][x] > 1.0 or popu1['h_m_cost'][i][x] > 1.0:
-                # print popu1['v_p_cost'][i][x], popu1['v_rp'][x]
-                # print popu1['v_m_cost'][i][x], popu1['v_rm'][x]
-                # print popu1['h_p_cost'][i][x]
-                # print popu1['h_m_cost'][i][x]
-                # print "find a error: VM or hm has overhold" , popu1['population'][i], x, vm_used_id, '\n'
                 return False
     return True
 
+def create_addition_list(rp_u, rm_u, p, addtion_nums):
+    '''
+    生成新增序列，记录新增容器的尺寸，以及集群需要维持的各类容器replicas数（注： 同服务的各replicas不可放于同VM）
+    '''
+    c_rp, c_rm = init_Docker(rp_u, rm_u, p, addtion_nums)   # 生成新增容器尺寸
 
-def main(num_var,p):
+    addtion0 = {
+        'c_rp':c_rp,                        # 新增容器cpu占用量
+        'c_rm':c_rm,                        # 新增容器mem占用量
+        'replicas':[ random.randint(0,5) for i in xrange(addtion_nums)]                     # 新增的该服务容器所需副本数
+    }
+    return addtion0
+
+
+def main(num_var, p, addtion_nums):
     # 1.算法主要参数设置
     rp_u = 0.25                            # 容器请求CPU的指导变量
     rm_u = 0.25                            # 容器请求MEM的指导变量
@@ -197,12 +205,17 @@ def main(num_var,p):
     v_rp, v_rm = init_VM(c_rp, c_rm, rp_option, rm_option, num_var)
 
     print "开始主流程"
+
     ## 以下程序的流程按照先按照串行结构书写
-    # 3. 初代种群的生成、代价计算及排序
+    # 3. 初代种群的生成
     init_popu = make_population(size, num_var, c_rp, c_rm, v_rp, v_rm)
     init_popu = initialize_population(init_popu, size, num_var)
-    print init_popu
+
+    # 4. 生成新增容器序列
+    addtion0 = create_addition_list(rp_u, rm_u, p, addtion_nums)
+
+    print 'init_popu = {0}, \n addition0 = {1} \n'.format(init_popu, addtion0)
 
 
 if __name__=='__main__':
-    main(50,1.0)
+    main(5, 1.0, 6)
