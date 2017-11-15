@@ -3,7 +3,8 @@
 '''
 Date : 2017-11-13
 @Author : Amy
-Goal: 用于生成新增时d-v-h架构初始状态，并尽量保留mbbo数据类型，方便说明聚合时mbbo优于BFD算法
+Goal: 用于生成新增时d-v-h架构初始状态，并尽量保留mbbo数据类型方便说明聚合时mbbo优于BFD算法;
+      生成新增容器序列，引入replicas考虑，对于同服务多副本必须使用互斥调度原则，不可同VM
 '''
 
 
@@ -214,7 +215,16 @@ def main(num_var, p, addtion_nums):
     # 4. 生成新增容器序列
     addtion0 = create_addition_list(rp_u, rm_u, p, addtion_nums)
 
-    print 'init_popu = {0}, \n addition0 = {1} \n'.format(init_popu, addtion0)
+    # print 'init_popu = {0}, \n addition0 = {1} \n'.format(init_popu, addtion0)
+
+    # 5. 针对two-domensions（cpu,mem）使用FFDProd、FFDSum、Dot-product（此处进行改进，使用cosine）、L2（基于鸥几里得距离）
+    # 注意： Swarm scheduler 的binpack strategy 即类似于 FFDSum，通过求weight进行打分，
+    # 详见github.com/docker/swarm/blob/master/scheduler/strategy/weighted_node.go或者图库截图
+
+    result0 = FFDProd()
+    result1 = FFDSum()         # 此处FFDSum使用于swarm相同的strategy
+    result2 = Dot_product()
+    result3 = l2()
 
 
 if __name__=='__main__':
