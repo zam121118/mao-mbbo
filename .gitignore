@@ -90,3 +90,5 @@ ENV/
 # The record to have the output of mbbo algrithm
 out.txt
 .DS_Store
+
+.vscode/

@@ -100,7 +100,9 @@ def check_effective(popu1, size, num_var):
             v_id = popu1['population'][i][j][0]
             h_id = popu1['population'][i][j][1]
             if v_id in vm_used_id:                     # 若vm已经被安排过
-                if h_id == vm_used_id[v_id]:           # 且所在的hm与安排过的hm相同，则跳过该次循环，不需要重新计算资源占用
+                if h_id == vm_used_id[v_id]:           # 则仅需更新因放入容器造成的该VM资源占用
+                    popu1['v_p_cost'][i][v_id] += popu1['c_rp'][j]
+                    popu1['v_m_cost'][i][v_id] += popu1['c_rm'][j]
                     continue
                 else:                                  # 若hm不同于安排的hm编号，说明出现同一个vm映射到不同hm的错误，直接返回
                     # print "in this chrom %s, a vm has been hosted on different hm, totally wrong!! " %popu1['population'][i]
