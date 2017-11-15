@@ -91,6 +91,7 @@ def make_population(size, num_var, c_rp, c_rm, v_rp, v_rm): #    作为全局变
         'v_m_cost': range2rect(size, num_var, 0.0),               # 每个vm被容器请求的mem，初始为0
         'h_p_cost': range2rect(size, num_var, 0.0),               # 每个HM被请求的cpu，初始为0
         'h_m_cost': range2rect(size, num_var, 0.0),               # HM被请求的mem，初始为0
+        'map_v_h': {}                                             # vm到hm的映射关系
     }
     return population0
 
@@ -134,6 +135,7 @@ def initialize_population(popu1, size, num_var):
                             vm_used_id[tmp_v_id] = tmp_h_id
                             break
                     break
+        popu1['map_v_h'] = vm_used_id
    
     if check_effective(popu1, size, num_var):
         print "Initailization population is effective"
@@ -161,7 +163,9 @@ def check_effective(popu1, size, num_var):
             v_id = popu1['population'][i][j][0]
             h_id = popu1['population'][i][j][1]
             if v_id in vm_used_id:                     # 若vm已经被安排过
-                if h_id == vm_used_id[v_id]:           # 且所在的hm与安排过的hm相同，则跳过该次循环，不需要重新计算资源占用
+                if h_id == vm_used_id[v_id]:           # 且所在的hm与安排过的hm相同，仅需计算该容器对VM的资源占用
+                    popu1['v_p_cost'][i][v_id] += popu1['c_rp'][j]
+                    popu1['v_m_cost'][i][v_id] += popu1['c_rm'][j]
                     continue
                 else:                                  # 若hm不同于安排的hm编号，说明出现同一个vm映射到不同hm的错误，直接返回
                     # print "in this chrom %s, a vm has been hosted on different hm, totally wrong!! " %popu1['population'][i]
@@ -199,7 +203,7 @@ def main(num_var, p, addtion_nums):
     rp_option = [1.0]                      # vm可选的cpu尺寸
     rm_option = [1.0]                      # vm可选的mem尺寸
 
-    size = 1                               # 新增阶段只需单解
+    size = 2                               # 新增阶段只需单解
 
     # 2.初始化num_var个容器和vm，以及计算迁移率
     c_rp, c_rm = init_Docker(rp_u, rm_u, p, num_var)
@@ -211,21 +215,23 @@ def main(num_var, p, addtion_nums):
     # 3. 初代种群的生成
     init_popu = make_population(size, num_var, c_rp, c_rm, v_rp, v_rm)
     init_popu = initialize_population(init_popu, size, num_var)
+    
+    popu0 = copy.deepcopy(init_popu) # 保存集群初始状态
 
     # 4. 生成新增容器序列
     addtion0 = create_addition_list(rp_u, rm_u, p, addtion_nums)
 
-    # print 'init_popu = {0}, \n addition0 = {1} \n'.format(init_popu, addtion0)
+    print 'init_popu = {0}, \n addition0 = {1} \n'.format(init_popu, addtion0)
 
     # 5. 针对two-domensions（cpu,mem）使用FFDProd、FFDSum、Dot-product（此处进行改进，使用cosine）、L2（基于鸥几里得距离）
     # 注意： Swarm scheduler 的binpack strategy 即类似于 FFDSum，通过求weight进行打分，
     # 详见github.com/docker/swarm/blob/master/scheduler/strategy/weighted_node.go或者图库截图
 
-    result0 = FFDProd()
-    result1 = FFDSum()         # 此处FFDSum使用于swarm相同的strategy
-    result2 = Dot_product()
-    result3 = l2()
+    # result0 = FFDProd()
+    # result1 = FFDSum(popu0， addtion0)         # 此处FFDSum使用于swarm相同的strategy
+    # result2 = Dot_product()
+    # result3 = l2()
 
 
 if __name__=='__main__':
-    main(5, 1.0, 6)
+    main(5, 1.0, 1)
