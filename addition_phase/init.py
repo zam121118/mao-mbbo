@@ -14,6 +14,7 @@ import math
 import json
 import sys
 import copy
+from FFDSum import *
 
 
 def range2rect(size, num_var, type0):
@@ -203,7 +204,7 @@ def main(num_var, p, addtion_nums):
     rp_option = [1.0]                      # vm可选的cpu尺寸
     rm_option = [1.0]                      # vm可选的mem尺寸
 
-    size = 2                               # 新增阶段只需单解
+    size = 1                               # 新增阶段只需单解
 
     # 2.初始化num_var个容器和vm，以及计算迁移率
     c_rp, c_rm = init_Docker(rp_u, rm_u, p, num_var)
@@ -228,10 +229,10 @@ def main(num_var, p, addtion_nums):
     # 详见github.com/docker/swarm/blob/master/scheduler/strategy/weighted_node.go或者图库截图
 
     # result0 = FFDProd()
-    # result1 = FFDSum(popu0， addtion0)         # 此处FFDSum使用于swarm相同的strategy
+    # result1 = FFDSum(popu0, addtion0)         # 此处FFDSum使用于swarm相同的strategy
     # result2 = Dot_product()
     # result3 = l2()
 
 
 if __name__=='__main__':
-    main(5, 1.0, 1)
+    main(10, 1.0, 50)
