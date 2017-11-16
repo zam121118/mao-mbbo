@@ -43,17 +43,22 @@ def FFDSum(bins, objects):
         
         while i>0:
             # 对该object(容器)计算所有bins（VMs）得分
-            weightedVMBins = weightVMBins(bins, object_CPU, object_MEM) 
+            weightedVMBins = weightVMBins(bins, object_CPU, object_MEM)
 
             # 至少有VM可以容纳该Object时，放入并更改参数
             if len(weightedVMBins) > 0:
                 # 获取得分最多bins的编号
                 vm_suffix = max(weightedVMBins, key=weightedVMBins.get)
 
-                # !!!! 此处需要考虑，获得的虚拟机编号，并没有与之对应的hm编号
-                hm_suffix = bins['map_v_h'][vm_suffix]
+                # 且该VM已经在当前集群中有映射HM
+                if vm_suffix in bins['map_v_h']:
+                    hm_suffix = bins['map_v_h'][vm_suffix]
 
-                # 更改放入VM后的资源变化
+                # 否则，需要为该VM找寻可以hosted 的HM,并更新资源
+                else:
+                    hm_suffix = find_HM(bins, bins['v_rp'][vm_suffix], bins['v_rm'][vm_suffix], vm_suffix)
+
+                # 更新放入该object（容器）造成的bin（VM）资源变化
                 bins['v_p_cost'][0][vm_suffix] += object_CPU
                 bins['v_m_cost'][0][vm_suffix] += object_MEM
                 
@@ -68,96 +73,60 @@ def FFDSum(bins, objects):
                 
             # 否则，当前集群没有能容纳该object（容器）的bin（VM）
             else:
-                # 随机生成一个足以容纳该容器的VM
+                # 随机生成一个足以容纳该容器的VM, 获取编号
                 vm = create_VM(object_CPU, object_MEM, rp_option, rm_option)
+                vm_suffix = len(bins['v_p_cost'][0])
 
-                # 为该VM（object）寻找HM（bin),先计算各HM得分
-                weightedHMBins = weightHMBins(bins, vm['rp'], vm['rm'])
-                
-                # 获取得分最高的HM编号/新加入的HM编号
-                if len(weightedHMBins) > 0:
-                    hm_suffix = max(weightedHMBins, key=weightedHMBins.get)
-                    vm_suffix = len(bins['v_p_cost'][0])
-                else:
-                    hm_suffix = len(bins['h_m_cost'][0])
-                    vm_suffix = len(bins['v_p_cost'][0])
+                # 为该VM找寻HM,并更新HM资源变动及map_v_h
+                hm_suffix = find_HM(bins, vm['rp'], vm['rm'], vm_suffix)
 
-                # 更新分别放入容器、VM后的资源变化
+                # 更新放入容器后造成的VM资源变化
+                bins['v_p_cost'][0].append(object_CPU)
+                bins['v_m_cost'][0].append(object_MEM)
+
+                # 追加系统容器、vm数量及资源分布
                 bins['c_rp'].append(object_CPU)
                 bins['c_rm'].append(object_MEM)
                 bins['v_rp'].append(vm['rp'])
                 bins['v_rm'].append(vm['rm'])
-                bins['v_p_cost'][0][vm_suffix] += object_CPU 
-                bins['v_m_cost'][0][vm_suffix] += object_MEM
-                bins['h_p_cost'][0][hm_suffix] += vm['rp'] 
-                bins['h_m_cost'][0][hm_suffix] += vm['rm']
-
 
                 # 更新‘population’、‘map_v_h’
                 bins['population'][0].append([vm_suffix, hm_suffix])
-                bins['map_v_h'][vm_suffix] = hm_suffix
 
                 # 已经解决掉一个object
                 i -= 1
                 continue
 
-                # 至少有HM能够容纳该新VM时，放入并修改参数
-                # if len(weightedHMBins) > 0:
-                #     # 获取得分最高HM编号
-                #     hm_suffix = max(weightedHMBins, key=weightedHMBins.get)
-                #     vm_suffix = len(bins['v_p_cost'][0])
-
-                #     # 更新分别放入容器、VM后的资源变化
-                #     bins['c_rp'].append(object_CPU)
-                #     bins['c_rm'].append(object_MEM)
-                #     bins['v_rp'].append(vm['rp'])
-                #     bins['v_rm'].append(vm['rm'])
-                #     bins['v_p_cost'][0][vm_suffix] += object_CPU 
-                #     bins['v_m_cost'][0][vm_suffix] += object_MEM
-                #     bins['h_p_cost'][0][hm_suffix] += vm['rp'] 
-                #     bins['h_m_cost'][0][hm_suffix] += vm['rm']
-
-
-                #     # 更新‘population’、‘map_v_h’
-                #     bins['population'][0].append([vm_suffix, hm_suffix])
-                #     bins['map_v_h'][vm_suffix] = hm_suffix
-
-                #     # 已经解决掉一个object
-                #     i -= 1
-                #     continue
-
-                # # 当前所有HM均无法容纳新的VM
-                # else:
-                #     # 添加新的HM，更新所有资源
-                #     hm_suffix = len(bins['h_m_cost'][0])
-                #     vm_suffix = len(bins['v_p_cost'][0])
-
-                #     # 更新分别放入容器、VM后的资源变化
-                #     bins['c_rp'].append(object_CPU)
-                #     bins['c_rm'].append(object_MEM)
-                #     bins['v_rp'].append(vm['rp'])
-                #     bins['v_rm'].append(vm['rm'])
-                #     bins['v_p_cost'][0][vm_suffix] += object_CPU 
-                #     bins['v_m_cost'][0][vm_suffix] += object_MEM
-                #     bins['h_p_cost'][0][hm_suffix] += vm['rp'] 
-                #     bins['h_m_cost'][0][hm_suffix] += vm['rm']
-
-                #     # 更新‘population’、‘map_v_h’
-                #     bins['population'][0].append([vm_suffix, hm_suffix])
-                #     bins['map_v_h'][vm_suffix] = hm_suffix
-
-                #     # 已经解决掉一个object
-                #     i -= 1
-                #     continue
-
-
+    # 说明性数据统计
     num = set(bins['map_v_h'].values())
     time1 = time.time()
-
     print "used time is {} \n used the number of HMs is {}".format(time1-time0, len(num))
     return bins
 
 
+
+
+def find_HM(bins, v_rp, v_rm, vm_suffix):
+    '''
+    为VM找寻可容纳其的HM标号(系统已有/新增)，并更新所引起的hm资源编号，及map_v_h
+    '''
+    # 对集群已有的所有HMs进行打分
+    weightedHMBins = weightHMBins(bins, v_rp, v_rm)
+
+    # 更新得分最高的HM资源
+    if len(weightedHMBins) > 0:
+        hm_suffix = max(weightedHMBins, key=weightedHMBins.get)
+        bins['h_p_cost'][0][hm_suffix] += v_rp
+        bins['h_m_cost'][0][hm_suffix] += v_rm  
+    # 更新新HM资源
+    else:
+        hm_suffix = len(bins['h_m_cost'][0])
+        bins['h_p_cost'][0].append(v_rp)
+        bins['h_m_cost'][0].append(v_rm)
+
+    # 更新放入VM造成的新HM资源变化及map_v_h
+    bins['map_v_h'][vm_suffix] = hm_suffix
+    return hm_suffix
 
 
 
@@ -196,15 +165,15 @@ def weightHMBins(bins, object_CPU, object_MEM):
         bin_reservedCPU = 1.0 - bins['h_p_cost'][0][j]
         bin_reservedMEM = 1.0 - bins['h_m_cost'][0][j]
         if bin_reservedCPU < object_CPU or bin_reservedMEM < object_MEM:
-                continue
+            continue
         cpuScore = 100
         memScore = 100
         if object_CPU > 0:
-                cpuScore = (bins['h_p_cost'][0][j] + object_CPU) * 100 / 1.0
+            cpuScore = (bins['h_p_cost'][0][j] + object_CPU) * 100 / 1.0
         if object_MEM > 0:
-                memScore = (bins['h_m_cost'][0][j] + object_MEM) * 100 / 1.0
+            memScore = (bins['h_m_cost'][0][j] + object_MEM) * 100 / 1.0
         if cpuScore <= 100 and memScore <= 100:
-                weightedHMBins.setdefault(j, cpuScore+memScore)
+            weightedHMBins.setdefault(j, cpuScore+memScore)
     return weightedHMBins
 
 
@@ -264,8 +233,14 @@ if __name__ == '__main__':
         'replicas': [4, 5, 5, 0, 3, 4, 3, 4, 4, 2, 2, 2, 2, 2, 3, 3, 2, 4, 3, 2, 4, 0, 1, 5, 3, 5, 2, 2, 2, 2, 5, 3, 3, 2, 4, 0, 1, 1, 4, 0, 1, 4, 1, 1, 5, 4, 5, 1, 1, 2]
         }
 
-    print 'Start:  init_popu = {} \n\n addtion = {}'.format(init_popu, addition0)
-
+    
+        
+    s0 = 'Start: \n init_popu = {} \n addtion = {}'.format(init_popu, addition0)
     bins = FFDSum(init_popu, addition0)
+    s1 = '\n\n End:   \n Bins = {}'.format(bins)    
 
-    print 'End:    Bins = {}'.format(bins)    
+    with open('addtion_phase//check_error.py','a') as f:
+        # print "打开文件了"
+        f.flush()
+        f.write(s0)
+        f.write(s1)
