@@ -230,7 +230,7 @@ def main(num_var, p, addtion_nums):
 
     # result0 = FFDProd()
     # result1 = FFDSum(popu0, addtion0)         # 此处FFDSum使用于swarm相同的strategy
-    # result2 = Dot_product()
+    # result2 = Dot_product(popu0, addtion0)
     # result3 = l2()
 
 
