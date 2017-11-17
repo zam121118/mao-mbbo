@@ -196,7 +196,7 @@ def create_VM(c_rp, c_rm, rp_option, rm_option):
 
 if __name__ == '__main__':
     '''
-    本模块测试
+    本模块测试算法是否运行正确
     '''
     # init_popu = {
     #     'c_rp': [0.4697016305356679, 0.29431926378647033, 0.22970477648767457, 0.32036803645328127, 0.4811686577824706, 0.39630054137437853, 0.1609631404578878, 0.2755880033213779, 0.38151011814458446, 0.023876102751119344],
@@ -233,14 +233,12 @@ if __name__ == '__main__':
         'replicas': [4, 5, 5, 0, 3, 4, 3, 4, 4, 2, 2, 2, 2, 2, 3, 3, 2, 4, 3, 2, 4, 0, 1, 5, 3, 5, 2, 2, 2, 2, 5, 3, 3, 2, 4, 0, 1, 1, 4, 0, 1, 4, 1, 1, 5, 4, 5, 1, 1, 2]
         }
 
-    
-        
+            
     s0 = 'Start: \n init_popu = {} \n addtion = {}'.format(init_popu, addition0)
     bins = FFDSum(init_popu, addition0)
     s1 = '\n\n End:   \n Bins = {}'.format(bins)    
 
     with open('addtion_phase//check_error.py','a') as f:
-        # print "打开文件了"
         f.flush()
         f.write(s0)
         f.write(s1)
