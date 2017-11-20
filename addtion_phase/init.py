@@ -16,6 +16,13 @@ import sys
 import copy
 from FFDSum import *
 
+def map_v2h(popu1, size):
+    '''
+    将popu1中'population'字段中第size个解转为vm：hm的字典映射
+    '''
+    map_v_h = dict(popu1['population'][size])
+    return map_v_h
+
 
 def range2rect(size, num_var, type0):
     '''
@@ -222,7 +229,12 @@ def main(num_var, p, addtion_nums):
     # 4. 生成新增容器序列
     addtion0 = create_addition_list(rp_u, rm_u, p, addtion_nums)
 
-    print 'init_popu = {0}, \n addition0 = {1} \n'.format(init_popu, addtion0)
+    # print 'init_popu = {0}, \n addition0 = {1} \n'.format(init_popu, addtion0)
+    # 写入FFDSum文件中
+    with open('addtion_phase//FFDSum.py','a') as f:
+        f.flush()
+        f.write('\n \ninit_popu = {0}, \naddition0 = {1} \n'.format(init_popu, addtion0))
+
 
     # 5. 针对two-domensions（cpu,mem）使用FFDProd、FFDSum、Dot-product（此处进行改进，使用cosine）、L2（基于鸥几里得距离）
     # 注意： Swarm scheduler 的binpack strategy 即类似于 FFDSum，通过求weight进行打分，
@@ -235,4 +247,4 @@ def main(num_var, p, addtion_nums):
 
 
 if __name__=='__main__':
-    main(10, 1.0, 50)
+    main(50, 1.0, 50)
