@@ -14,7 +14,6 @@ Digest : 定义FFD-based Herustics常见方法FFDSum即通过将多维demand、c
 
 import time
 import random
-import sys
 import math
 
 
@@ -45,7 +44,7 @@ def FFDSum(bins, objects):
         
         while i>0:
             # 对该object(容器)计算所有bins（VMs）得分
-            weightedVMBins = weightVMBins(bins, object_CPU, object_MEM)
+            weightedVMBins = weightVMBins_FFDSum(bins, object_CPU, object_MEM)
 
             # 至少有VM可以容纳该Object时，放入并更改参数
             if len(weightedVMBins) > 0:
@@ -113,7 +112,7 @@ def find_HM(bins, v_rp, v_rm, vm_suffix):
     为VM找寻可容纳其的HM标号(系统已有/新增)，并更新所引起的hm资源编号，及map_v_h
     '''
     # 对集群已有的所有HMs进行打分
-    weightedHMBins = weightHMBins(bins, v_rp, v_rm)
+    weightedHMBins = weightHMBins_FFDSum(bins, v_rp, v_rm)
 
     # 更新得分最高的HM资源
     if len(weightedHMBins) > 0:
@@ -132,11 +131,11 @@ def find_HM(bins, v_rp, v_rm, vm_suffix):
 
 
 
-def weightVMBins(bins, object_CPU, object_MEM):
+def weightVMBins_FFDSum(bins, object_CPU, object_MEM):
     '''
     计算集群bins(VMs)中所有bin的权重，并返回weightedVMBins记录有各个node(VM)得分的weightedVMBins
     '''
-    print "\n 进入weightVMBins() 方法"
+    print "\n 进入weightVMBins_FFDSum() 方法"
 
     weightedVMBins = {}
     for j in xrange(len(bins['v_p_cost'][0])):
@@ -155,11 +154,11 @@ def weightVMBins(bins, object_CPU, object_MEM):
     return weightedVMBins
 
 
-def weightHMBins(bins, object_CPU, object_MEM):
+def weightHMBins_FFDSum(bins, object_CPU, object_MEM):
     '''
     计算集群bins(HMs)中所有bin的权重，并返回weightedHMBins记录有各个node(HM)得分的weightedHMBins
     '''
-    print "\n 进入weightHMBins() 方法"
+    print "\n 进入weightHMBins_FFDSum() 方法"
 
 
     weightedHMBins = {}
