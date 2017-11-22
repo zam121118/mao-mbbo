@@ -247,4 +247,4 @@ def main(num_var, p, addtion_nums):
 
 
 if __name__=='__main__':
-    main(50, 1.0, 50)
+    main(40, 1.0, 100)
