@@ -181,22 +181,29 @@ def weightHMBins_FFDSum(bins, object_CPU, object_MEM):
     return weightedHMBins
 
 
+def deprecated_create_VM(c_rp, c_rm, rp_option, rm_option):
+
+    '''
+    依据实验可选的VMcpu、mem list尺寸(rp_option、rm_option)随机生成可以容纳(c_rp、c_rm)的VM
+    '''
+    print "\n 进入 create_VM() 方法"
+
+    vm = {'rp':0, 'rm':0}
+    while vm['rp'] == 0:
+        rp = random.choice(rp_option)
+        rm = random.choice(rm_option)
+        if rp >= c_rp and rm >= c_rm:
+            vm['rp'],vm['rm'] = rp,rm
+    return vm
+
 def create_VM(c_rp, c_rm, vm_option):
 
     '''
-    # 依据实验可选的VM尺寸(rp_option、rm_option)随机生成可以容纳(c_rp、c_rm)的VM
-    为了放置完全随机的产生虚拟机尺寸，可以人为干预的设置几种虚拟机尺寸(cpu, mem)
+    为了防止完全随机的产生虚拟机尺寸，而希望可以人为的预先设置几种虚拟机尺寸(cpu, mem)
     [0.3, 0.3], [0.5, 0.4] [0.6, 0.5] [0.8, 0.7] [1.0, 0.8] [1.0, 1.0]
     '''
     print "\n 进入 create_VM() 方法"
 
-    # 完全随机的创建vm尺寸
-    # vm = {'rp':0, 'rm':0}
-    # while vm['rp'] == 0:
-    #     rp = random.choice(rp_option)
-    #     rm = random.choice(rm_option)
-    #     if rp >= c_rp and rm >= c_rm:
-    #         vm['rp'],vm['rm'] = rp,rm
     vm = {'rp':0, 'rm':0}
     for i in xrange(len(vm_option)):
         if vm_option[i][0] >= c_rp and vm_option[i][1] >= c_rm:
@@ -225,7 +232,9 @@ def compute_costs(bins, size=1):
     cost = {
         'power_cost': 0.0,
         'v_balance_cost': 0.0,
+        'v_average_load_index': 0.0,
         'h_balance_cost': 0.0,
+        'h_average_load_index': 0.0,
         'used_vms': 0,
         'used_hms': 0
         }
@@ -234,7 +243,7 @@ def compute_costs(bins, size=1):
     used_hms = list(set(map_v_p.values()))
     
 
-    # Then, 对bins中第size方案计算代价值（在新增算法中，size只有0一种值）
+    # Then, 对bins中前size个方案计算代价值（在新增算法中，size只有0一种值）
     for i in xrange(size):
         h_load_index = []      # 各HM的负载均衡指数
         v_load_index = []      # 各VM的负载均衡指数
@@ -263,6 +272,8 @@ def compute_costs(bins, size=1):
         tmp0, tmp1 = len(used_vms), len(used_hms)
         v_average_load_index = sum(v_load_index) / tmp0
         h_average_load_index = sum(h_load_index) / tmp1
+        cost['v_average_load_index'] = v_average_load_index
+        cost['h_average_load_index'] = h_average_load_index
         while tmp0 > 0 or tmp1 > 0:
             if tmp0 > 0:
                 cost['v_balance_cost'] += (v_load_index[tmp0 - 1] - v_average_load_index)**2
@@ -279,7 +290,7 @@ def compute_costs(bins, size=1):
         # 计算VM迁移时间（仅聚合阶段）
         pass
 
-    print 'cost={}'.format(cost)
+    # print 'cost={}'.format(cost)
     return cost
 
 
