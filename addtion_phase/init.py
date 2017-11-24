@@ -14,7 +14,6 @@ import math
 import json
 import sys
 import copy
-from FFDSum import *
 
 def map_v2h(popu1, size):
     '''
@@ -56,7 +55,7 @@ def init_Docker(rp_u, rm_u, p, num_var):
     #print "len(c_rp)= %s,len(c_rm) = %s" %(len(c_rp),len(c_rm))
     return c_rp, c_rm
 
-def init_VM(c_rp, c_rm, rp_option, rm_option, num_var):
+def deprecated_init_VM(c_rp, c_rm, rp_option, rm_option, num_var):
     '''
     goal： 根据已有容器大小，初始化的d-v-h映射关系
     参数:
@@ -83,6 +82,31 @@ def init_VM(c_rp, c_rm, rp_option, rm_option, num_var):
         else:
             continue
 
+def init_VM(c_rp, c_rm, vm_option, num_var):
+    '''
+    goal： 根据已有容器大小，初始化的d-v-h映射关系
+    参数:
+    vm_option为VM可选的CPU、mem尺寸;c_rp,c_rm为对应下标的容器尺寸
+    num_var容器个数，初始假设vm数量与容器数量1：1
+    返回：
+    能够容纳对应编号容器的VM有效尺寸系列
+    注意： 为了在实验中控制VM完全随机的生成，故选用vm_option控制固定尺寸VM
+    '''
+    # print "进入init_VM"
+    v_rp = []
+    v_rm = []
+    i = 0
+    while True:
+        if i == num_var:                        # 对num_var个docker选择随机的vm位置
+            #print "len(v_rp)= %s,len(v_rm) = %s" %(len(v_rp),len(v_rm))
+            return v_rp, v_rm
+        rp, rm = random.choice(vm_option)
+        if rp >= c_rp[i] and rm >= c_rm[i]:
+            v_rp.append(rp)
+            v_rm.append(rm)
+            i += 1
+        else:
+            continue
 
 def make_population(size, num_var, c_rp, c_rm, v_rp, v_rm): #    作为全局变量，按照需要传入各方法中 f, p_mutate, time_base, lambdaa):
     '''
@@ -189,7 +213,7 @@ def check_effective(popu1, size, num_var):
                 return False
     return True
 
-def create_addition_list(rp_u, rm_u, p, addtion_nums):
+def create_addtion_list(rp_u, rm_u, p, addtion_nums):
     '''
     生成新增序列，记录新增容器的尺寸，以及集群需要维持的各类容器replicas数（注： 同服务的各replicas不可放于同VM）
     '''
@@ -203,19 +227,21 @@ def create_addition_list(rp_u, rm_u, p, addtion_nums):
     return addtion0
 
 
-def main(num_var, p, addtion_nums):
+def main_init(num_var, p, addtion_nums):
     # 1.算法主要参数设置
     rp_u = 0.25                            # 容器请求CPU的指导变量
     rm_u = 0.25                            # 容器请求MEM的指导变量
     p = p                                  # 控制容器cpu,mem的资源相关度
-    rp_option = [1.0]                      # vm可选的cpu尺寸
-    rm_option = [1.0]                      # vm可选的mem尺寸
+    # deprecated_rp_option = [1.0]                      # vm可选的cpu尺寸
+    # deprecated_rm_option = [1.0]
+    vm_option = [(0.3, 0.3), (0.5, 0.4), (0.6, 0.5), (0.8, 0.7), (1.0, 0.8), (1.0, 1.0)]                      # vm可选的mem尺寸
 
     size = 1                               # 新增阶段只需单解
 
     # 2.初始化num_var个容器和vm，以及计算迁移率
     c_rp, c_rm = init_Docker(rp_u, rm_u, p, num_var)
-    v_rp, v_rm = init_VM(c_rp, c_rm, rp_option, rm_option, num_var)
+    #deprecated: v_rp, v_rm = init_VM(c_rp, c_rm, rp_option, rm_option, num_var)
+    v_rp, v_rm = init_VM(c_rp, c_rm, vm_option, num_var)
 
     print "开始主流程"
 
@@ -227,13 +253,13 @@ def main(num_var, p, addtion_nums):
     popu0 = copy.deepcopy(init_popu) # 保存集群初始状态
 
     # 4. 生成新增容器序列
-    addtion0 = create_addition_list(rp_u, rm_u, p, addtion_nums)
+    addtion0 = create_addtion_list(rp_u, rm_u, p, addtion_nums)
 
-    # print 'init_popu = {0}, \n addition0 = {1} \n'.format(init_popu, addtion0)
+    # print 'init_popu = {0}, \n addtion0 = {1} \n'.format(init_popu, addtion0)
     # 写入FFDSum文件中
-    with open('addtion_phase//FFDSum.py','a') as f:
-        f.flush()
-        f.write('\n \ninit_popu = {0}, \naddition0 = {1} \n'.format(init_popu, addtion0))
+    # with open('addtion_phase//FFDSum.py','a') as f:
+    #     f.flush()
+    #     f.write('\n \ninit_popu = {0}, \naddtion0 = {1} \n'.format(init_popu, addtion0))
 
 
     # 5. 针对two-domensions（cpu,mem）使用FFDProd、FFDSum、Dot-product（此处进行改进，使用cosine）、L2（基于鸥几里得距离）
@@ -244,7 +270,9 @@ def main(num_var, p, addtion_nums):
     # result1 = FFDSum(popu0, addtion0)         # 此处FFDSum使用于swarm相同的strategy
     # result2 = Dot_product(popu0, addtion0)
     # result3 = l2()
+    return (init_popu, addtion0)
 
 
 if __name__=='__main__':
-    main(40, 1.0, 100)
+    init_popu, addtion0 = main_init(40, 1.0, 100)
+    print init_popu,'\n',addtion0

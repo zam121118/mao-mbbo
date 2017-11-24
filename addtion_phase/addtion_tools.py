@@ -10,6 +10,7 @@ Digest : 本模块定义了能够描述FFDSum以及Dot-Prod算法的有效模块
 import time
 import random
 import math
+from init import *
 
 def Dot_product(bins, objects):
     '''
@@ -89,9 +90,9 @@ def Dot_product(bins, objects):
 
     # 说明性数据统计
     num = set(bins['map_v_h'].values())
-    time1 = time.time()
-    print "used time is {} \n used the number of HMs is {}".format(time1-time0, len(num))
-    return bins
+    used_time = time.time() - time0
+    print "Dot-Prod used time is {} \n used the number of HMs is {}".format(used_time, len(num))
+    return (bins, used_time)
 
 
 def FFDSum(bins, objects):
@@ -172,9 +173,9 @@ def FFDSum(bins, objects):
 
     # 说明性数据统计
     num = set(bins['map_v_h'].values())
-    time1 = time.time()
-    print "used time is {} \n used the number of HMs is {}".format(time1-time0, len(num))
-    return bins
+    used_time = time.time() - time0
+    print "FFDSum used time is {} \n used the number of HMs is {}".format(used_time, len(num))
+    return (bins, used_time)
 
 
 def find_HM(bins, v_rp, v_rm, vm_suffix, handle):
@@ -238,9 +239,6 @@ def map_v2h(bins, size=0):
     map_v_h = dict(bins['population'][size])
     return map_v_h
 
-
-
-
 def weightVMBins_FFDSum(bins, object_CPU, object_MEM):
     '''
     计算集群bins(VMs)中所有bin的权重，并返回weightedVMBins记录有各个node(VM)得分的weightedVMBins
@@ -252,24 +250,22 @@ def weightVMBins_FFDSum(bins, object_CPU, object_MEM):
         bin_reservedCPU = bins['v_rp'][j] - bins['v_p_cost'][0][j]
         bin_reservedMEM = bins['v_rm'][j] - bins['v_m_cost'][0][j]
         if bin_reservedCPU < object_CPU or bin_reservedMEM < object_MEM:
-                continue
+            continue
         cpuScore = 100
         memScore = 100
         if object_CPU > 0:
-                cpuScore = (bins['v_p_cost'][0][j] + object_CPU) * 100 / bins['v_rp'][j]
+            cpuScore = (bins['v_p_cost'][0][j] + object_CPU) * 100 / bins['v_rp'][j]
         if object_MEM > 0:
-                memScore = (bins['v_m_cost'][0][j] + object_MEM) * 100 / bins['v_rm'][j]
+            memScore = (bins['v_m_cost'][0][j] + object_MEM) * 100 / bins['v_rm'][j]
         if cpuScore <= 100 and memScore <= 100:
-                weightedVMBins.setdefault(j, cpuScore+memScore)
+            weightedVMBins.setdefault(j, cpuScore+memScore)
     return weightedVMBins
-
 
 def weightHMBins_FFDSum(bins, object_CPU, object_MEM):
     '''
     计算集群bins(HMs)中所有bin的权重，并返回weightedHMBins记录有各个node(HM)得分的weightedHMBins
     '''
     print "\n 进入weightHMBins_FFDSum() 方法"
-
 
     weightedHMBins = {}
     for j in xrange(len(bins['h_p_cost'][0])):
@@ -344,6 +340,7 @@ def weightHMBins_DotProd(bins, object_CPU, object_MEM):
             weightedHMBins.setdefault(j, cosScore)
     return weightedHMBins
 
+
 def compute_costs(bins, size=1):
     '''
     计算bins中前size个方案对应的能耗、负载均衡方差代价值，由于新增阶段不涉及VM内存迁移，所以不考虑迁移时间
@@ -359,7 +356,8 @@ def compute_costs(bins, size=1):
         'h_balance_cost': 0.0,
         'h_average_load_index': 0.0,
         'used_vms': 0,
-        'used_hms': 0
+        'used_hms': 0,
+        'used_time': 0.0
         }
     map_v_p = map_v2h(bins)
     used_vms = map_v_p.keys()
@@ -416,7 +414,7 @@ def compute_costs(bins, size=1):
     # print 'cost={}'.format(cost)
     return cost
 
-def a_tmp_func(bins, objects, s0, handle0, handle1):
+def compositive_func(bins, objects, s0, handle0, handle1):
     '''
     @param: bins 代表当前系统状态
             objects 代表待放入bin的容器
@@ -495,39 +493,54 @@ def a_tmp_func(bins, objects, s0, handle0, handle1):
 
     # 说明性数据统计
     num = set(bins['map_v_h'].values())
-    time1 = time.time()
-    print "used time is {} \n used the number of HMs is {}".format(time1-time0, len(num))
-    return bins
+    used_time = time.time() - time0
+    print "{} used time is {} \n used the number of HMs is {}".format(s0, used_time, len(num))
+    return (bins, used_time)
 
 
 if __name__ == '__main__':
-    # 可选的虚机尺寸
+
+    # 1. 设置可选的虚机尺寸
     vm_option = [(0.3, 0.3), (0.5, 0.4), (0.6, 0.5), (0.8, 0.7), (1.0, 0.8), (1.0, 1.0)]
 
     # 初始集群状态及新增序列，test1
-    init_popu = {
-        'c_rp': [0.4697016305356679, 0.29431926378647033, 0.22970477648767457, 0.32036803645328127, 0.4811686577824706, 0.39630054137437853, 0.1609631404578878, 0.2755880033213779, 0.38151011814458446, 0.023876102751119344],
-        'c_rm': [0.280698996006043, 0.3440203847852634, 0.00011105303698105695, 0.2985981849500239, 0.4261539194747088, 0.333748152269725, 0.20113407453783236, 0.3387976831408542,0.45844925092062805, 0.07975242436510899],
-        'v_rp': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-        'v_rm': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-        'population': [[[0, 9], [2, 3], [7, 8], [0, 9], [1, 2], [2, 3], [1, 2], [4, 7], [6, 0], [7, 8]]],
-        'v_p_cost': [[0.7900696669889491, 0.6421317982403584, 0.6906198051608489, 0, 0.2755880033213779, 0, 0.38151011814458446, 0.2535808792387939, 0, 0]],
-        'v_m_cost': [[0.5792971809560669, 0.6272879940125412, 0.6777685370549884, 0, 0.3387976831408542, 0, 0.45844925092062805, 0.07986347740209004, 0, 0]],
-        'h_p_cost': [[1.0, 0, 1.0, 1.0, 0, 0, 0, 1.0, 1.0, 1.0]],
-        'h_m_cost': [[1.0, 0, 1.0, 1.0, 0, 0, 0, 1.0, 1.0, 1.0]],
-        'map_v_h': {0: 9, 1: 2, 2: 3, 4: 7, 6: 0, 7: 8}
-        }
-    addition0 = {
-        'c_rp': [0.2534765051859606, 0.2948935628141042, 0.2224244890668316, 0.18127979201839872, 0.32156802827499703],
-        'c_rm': [0.3020445793942861, 0.3768727547924075, 0.006082192833673228, 0.15746276310264423, 0.39400382229512343],
-        'replicas': [4, 0, 4, 3, 0]
-    }
+    # init_popu = {
+    #     'c_rp': [0.4697016305356679, 0.29431926378647033, 0.22970477648767457, 0.32036803645328127, 0.4811686577824706, 0.39630054137437853, 0.1609631404578878, 0.2755880033213779, 0.38151011814458446, 0.023876102751119344],
+    #     'c_rm': [0.280698996006043, 0.3440203847852634, 0.00011105303698105695, 0.2985981849500239, 0.4261539194747088, 0.333748152269725, 0.20113407453783236, 0.3387976831408542,0.45844925092062805, 0.07975242436510899],
+    #     'v_rp': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+    #     'v_rm': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+    #     'population': [[[0, 9], [2, 3], [7, 8], [0, 9], [1, 2], [2, 3], [1, 2], [4, 7], [6, 0], [7, 8]]],
+    #     'v_p_cost': [[0.7900696669889491, 0.6421317982403584, 0.6906198051608489, 0, 0.2755880033213779, 0, 0.38151011814458446, 0.2535808792387939, 0, 0]],
+    #     'v_m_cost': [[0.5792971809560669, 0.6272879940125412, 0.6777685370549884, 0, 0.3387976831408542, 0, 0.45844925092062805, 0.07986347740209004, 0, 0]],
+    #     'h_p_cost': [[1.0, 0, 1.0, 1.0, 0, 0, 0, 1.0, 1.0, 1.0]],
+    #     'h_m_cost': [[1.0, 0, 1.0, 1.0, 0, 0, 0, 1.0, 1.0, 1.0]],
+    #     'map_v_h': {0: 9, 1: 2, 2: 3, 4: 7, 6: 0, 7: 8}
+    #     }
+    # addtion0 = {
+    #     'c_rp': [0.2534765051859606, 0.2948935628141042, 0.2224244890668316, 0.18127979201839872, 0.32156802827499703],
+    #     'c_rm': [0.3020445793942861, 0.3768727547924075, 0.006082192833673228, 0.15746276310264423, 0.39400382229512343],
+    #     'replicas': [4, 0, 4, 3, 0]
+    # }
 
-    # 开始程序
-    cost0 = compute_costs(init_popu)
-    s0 = 'Start: \nThe initial cost = {}'.format(cost0)
-    # bins = a_tmp_func(init_popu, addition0, 'FFDSum()', weightVMBins_FFDSum, weightHMBins_FFDSum)
-    bins = a_tmp_func(init_popu, addition0, 'Dot-Prod()', weightVMBins_DotProd, weightHMBins_DotProd)
-    cost1 = compute_costs(bins)
-    s1 = '\n\n\nEnd:   \nBins = {} \n\n\nThe cost of new state = {}'.format(bins, cost1)    
-    print s0,s1
+    # 2. 初始化集群状态及新增序列，计算初始集群的各项指标代价，并深拷贝一份作为第二个算法实参
+    init_popu0, addtion0 = main_init(40, 1.0, 40)
+    init_popu1 = copy.deepcopy(init_popu0)
+    init_cost = compute_costs(init_popu0)
+    s0 = 'Start: \nThe initial Bins = {} \n\n\n The initial cost = {}\n'.format(init_popu0 ,init_cost)
+
+    # 3. 分别在两个相同集群状态上执行调度算法，并分别计算最终集群的各项代价
+    bins0, used_time0 = compositive_func(init_popu0, addtion0, 'FFDSum()', weightVMBins_FFDSum, weightHMBins_FFDSum)
+    bins1, used_time1 = compositive_func(init_popu1, addtion0, 'Dot-Prod()', weightVMBins_DotProd, weightHMBins_DotProd)
+    cost0, cost1 = compute_costs(bins0), compute_costs(bins1)
+    cost0['used_time'], cost1['used_time'] = used_time0, used_time1
+    
+    # 4. 存档记录（s2记录比较详细，用来检验算法运行正确性）
+    s2 = '\n\n\nEnd:\n\n\nThe FFDSum cost of new state = {}\n\nThe FFDSum_Bins = {}  \
+    \n\n\nThe Dot-prod cost of new state = {}\n\nThe Dot-Prod_Bins = {} '.format(cost0, bins0, cost1, bins1)
+    # s1 = '\n\n\nEnd:\n\n\nThe FFDSum cost of new state = {}\n\n\nThe Dot-prod cost of new state = {}'.format(cost0, cost1)
+    
+    # print s0,s1
+    with open('addtion_phase//tmp.py','a') as f:
+        f.flush()
+        f.write(s0)
+        f.write(s2)
