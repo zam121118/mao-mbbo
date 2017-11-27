@@ -102,9 +102,9 @@ def func_L2(bins, objects):
 
     # 说明性数据统计
     num = set(bins['map_v_h'].values())
-    time1 = time.time()
-    print "used time is {} \n used the number of HMs is {}".format(time1-time0, len(num))
-    return bins
+    used_time = time.time() - time0
+    print "Dot-Prod used time is {} \n used the number of HMs is {}".format(used_time, len(num))
+    return (bins, used_time)
 
 
 
@@ -148,6 +148,8 @@ def weightVMBins_L2(bins, object_CPU, object_MEM):
             continue
         distanceScore = (bins['v_p_cost'][0][j] + object_CPU) / bins['v_rp'][j] * (bin_reservedCPU - object_CPU)**2 + \
         (bins['v_m_cost'][0][j] + object_MEM) / bins['v_rm'][j] * (bin_reservedMEM - object_MEM)**2
+        # 不加权求demand、remainning向量间鸥几里得距离效果不如加权好
+        # distanceScore = (bin_reservedCPU - object_CPU)**2 + (bin_reservedMEM - object_MEM)**2
         if distanceScore <= 2.00:
             weightedVMBins.setdefault(j, distanceScore)
     return weightedVMBins
@@ -168,6 +170,8 @@ def weightHMBins_L2(bins, object_CPU, object_MEM):
             continue
         distanceScore = (bins['h_p_cost'][0][j] + object_CPU) / 1.0 * (bin_reservedCPU - object_CPU)**2 + \
         (bins['h_m_cost'][0][j] + object_MEM) / 1.0 * (bin_reservedMEM - object_MEM)**2
+        # 不加权求demand、remainning向量间鸥几里得距离效果不如加权好
+        # distanceScore = (bin_reservedCPU - object_CPU)**2 + (bin_reservedMEM - object_MEM)**2
         if distanceScore <= 2.00:
             weightedHMBins.setdefault(j, distanceScore)
     return weightedHMBins
@@ -228,7 +232,8 @@ def compute_costs(bins, size=1):
         'h_balance_cost': 0.0,
         'h_average_load_index': 0.0,
         'used_vms': 0,
-        'used_hms': 0
+        'used_hms': 0,
+        'used_time': 0.0
         }
     map_v_p = map_v2h(bins)
     used_vms = map_v_p.keys()
@@ -389,8 +394,9 @@ if __name__ == '__main__':
     
     cost0 = compute_costs(init_popu)
     s0 = 'Start:\n\nThe initial cost = {}'.format(cost0)
-    bins = func_L2(init_popu, addtion0)
+    bins, used_time = func_L2(init_popu, addtion0)
     cost1 = compute_costs(bins)
+    cost1['used_time'] = used_time
     s1 = '\n\n\nEnd:func_L2 Bins = {}\n\nThe cost of new state = {}\n\n'.format(bins, cost1)    
     # print s0,s1
 

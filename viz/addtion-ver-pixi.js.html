@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Contrast of docker scheduler strategies</title>
+    <!-- 引入 ECharts 文件 -->
+    <script type="text/javascript" src="./static/lib/echarts/3.8.4/echarts.min.js"></script>
+    <script type="text/javascript" src="./static/lib/echarts/3.5.3/theme-dark.js"></script>
+    <!--引入jQuery-->
+    <script type="text/javascript" src="./static/lib/jquery/jquery-2.1.1.js"></script>
+    <script type="text/javascript" src="./static/lib/jqueryui/humanlity/jquery-ui.js"></script>
+    <script type="text/javascript" src="./static/lib/jquery/jquery-2.1.1.js"></script>
+    <script type="text/javascript" src="./static/lib/jqueryui/humanlity/jquery-ui.js"></script>
+    <script type="text/javascript" src="./static/lib/dat.gui/dat.gui.js"></script>
+    <script type="text/javascript" src="./static/lib/pixi.js/v4.4.4/pixi.min.js"></script>
+    <link rel="stylesheet" href="./static/lib/jqueryui/humanlity/jquery-ui.css">
+    <link rel="stylesheet" href="./static/lib/font-awesome/4.7.0/css/font-awesome.css">
+</head>
+<body>
+    <!--初始化一个DOM-->
+    <div id="main" style="width: 600px; height:400px;"></div>
+    <script type="text/javascript">
+
+    // 基于准备好的dom,初始化echarts实例
+    var myChart = echarts.init(document.getElementById('main'));
+
+    // 使用指定的配置项指定parallel aqi option的配置项和数据
+    var dataFFDsum = null;
+    var dataFFDProd = null;
+    var dataDotProd = null;
+    var dataL2= null;
+    var schema = [
+        {name:'scale', index: 0, text:'增量规模'},
+        {name:'Power', index: 1, text:'能耗'},
+        {name:'v_balance', index: 2, text:'VM负载平方差'},
+        {name:'v_average_balance', index: 3, text:'VM负载指数均值'},
+        {name:'h_balance', index: 4, text:'HM负载平方差'},
+        {name:'h_average_balance', index: 5, text:'HM负载指数均值'},
+        {name:'used_hms', index: 6, text:'运行HM规模'},
+        {name:'used_vms', index: 7, text:'运行VM规模'},
+        {name:'used_time', index: 8, text:'计算耗时'}
+    ];
+    var lineStyle = {
+        normal:{
+            width: 1,
+            opacity: 0.5
+        }
+    };
+    
+    var option = {
+        backgroundColor: '#333',
+        legend: {
+            bottom: 30,
+            data: ['FFDSum', 'FFDProd', 'Dot-Prod', 'L2'],
+            itemGap: 20,
+            textStyle: {
+                color: '#fff',
+                fontSize: 14
+            }
+        },
+        tooltip: {
+            padding: 10,
+            backgroundColor: '#222',
+            borderColor: '#777',
+            borderWidth: 1,
+            formatter: function (obj) {
+                var value = obj[0].value;
+                return '<div style="border-bottom: 1px solid rgba(255,255,255,.3); font-size: 18px;padding-bottom: 7px;margin-bottom: 7px">'
+                    + obj[0].seriesName + ' ' + value[0] + '增量规模：'
+                    + value[7]
+                    + '</div>'
+                    + schema[1].text + '：' + value[1] + '<br>'
+                    + schema[2].text + '：' + value[2] + '<br>'
+                    + schema[3].text + '：' + value[3] + '<br>'
+                    + schema[4].text + '：' + value[4] + '<br>'
+                    + schema[5].text + '：' + value[5] + '<br>'
+                    + schema[6].text + '：' + value[6] + '<br>';
+            }
+        },
+        // dataZoom: {
+        //     show: true,
+        //     orient: 'vertical',
+        //     parallelAxisIndex: [0]
+        // },
+        parallelAxis: [
+            {dim: 0, name: schema[0].text, inverse: true, nameLocation: 'start'},
+            {dim: 1, name: schema[1].text},
+            {dim: 2, name: schema[2].text},
+            {dim: 3, name: schema[3].text},
+            {dim: 4, name: schema[4].text},
+            {dim: 5, name: schema[5].text},
+            {dim: 6, name: schema[6].text},
+            {dim: 7, name: schema[7].text}
+        ],
+        visualMap: {
+            show: true,
+            min: 0,
+            max: 150,
+            dimension: 2,
+            inRange: {
+                color: ['#d94e5d','#eac736','#50a3ba'].reverse(),
+                // colorAlpha: [0, 1]
+            }
+        },
+        parallel: {
+            left: '5%',
+            right: '18%',
+            bottom: 100,
+            parallelAxisDefault: {
+                type: 'value',
+                name: 'Power',
+                nameLocation: 'end',
+                nameGap: 20,
+                nameTextStyle: {
+                    color: '#fff',
+                    fontSize: 12
+                },
+                axisLine: {
+                    lineStyle: {
+                        color: '#aaa'
+                    }
+                },
+                axisTick: {
+                    lineStyle: {
+                        color: '#777'
+                    }
+                },
+                splitLine: {
+                    show: false
+                },
+                axisLabel: {
+                    textStyle: {
+                        color: '#fff'
+                    }
+                }
+            }
+        },
+        series: [
+            {
+                name: 'FFDSum',
+                type: 'parallel',
+                lineStyle: lineStyle,
+                data: dataFFDsum
+            },
+            {
+                name: 'FFDProd',
+                type: 'parallel',
+                lineStyle: lineStyle,
+                data: dataFFDProd
+            },
+            {
+                name: 'Dot-Prod',
+                type: 'parallel',
+                lineStyle: lineStyle,
+                data: dataDotProd
+            },
+            {
+                name: 'L2',
+                type: 'parallel',
+                lineStyle: lineStyle,
+                data: dataL2
+            }
+        ]
+    };
+
+
+    // 异步加载数据get_data()
+    // $.get('./addtion-demo.json','json').done(function (data){
+    //     dataFFDsum = data.FFDSum;
+    //     dataFFDProd = data.FFDProd;
+    //     dataDotProd = data.Dot_Prod;
+    //     dataL2 = data.L2;
+    // });
+    $.get('./addtion-demo.json',{},function (data){
+        dataFFDsum = data.FFDSum;
+        dataFFDProd = data.FFDProd;
+        dataDotProd = data.Dot_Prod;
+        dataL2 = data.L2;
+    },'json');
+
+
+    // 使用刚指定的配置项和数据显示图表
+    myChart.setOption(option);
+
+    // 平行坐标数据序列为addtion_scale、power_cost、v_balance_cost、v_average_load_index
+    // h_balance_cost、h_average_load_index、used_hms、used_vms、used_time
+    </script>
+</body>
+</html>

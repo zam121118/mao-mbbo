@@ -101,10 +101,9 @@ def FFDProd(bins, objects):
                 continue
 
     # 说明性数据统计
-    num = set(bins['map_v_h'].values())
-    time1 = time.time()
-    print "used time is {} \n used the number of HMs is {}".format(time1-time0, len(num))
-    return bins
+    used_time = time.time() - time0
+    print "Dot-Prod used time is {} \n used the number of HMs is {}".format(used_time, len(num))
+    return (bins, used_time)
 
 
 
@@ -226,7 +225,8 @@ def compute_costs(bins, size=1):
         'h_balance_cost': 0.0,
         'h_average_load_index': 0.0,
         'used_vms': 0,
-        'used_hms': 0
+        'used_hms': 0,
+        'used_time': 0.0
         }
     map_v_p = map_v2h(bins)
     used_vms = map_v_p.keys()
@@ -388,8 +388,9 @@ if __name__ == '__main__':
     
     cost0 = compute_costs(init_popu)
     s0 = 'Start:\n\nThe initial cost = {}'.format(cost0)
-    bins = FFDProd(init_popu, addtion0)
+    bins, used_time = FFDProd(init_popu, addtion0)
     cost1 = compute_costs(bins)
+    cost1['used_time'] = used_time
     s1 = '\n\n\nEnd:\nFFDProd Bins = {}\n\nThe cost of new state = {}\n\n'.format(bins, cost1)    
     # print s0,s1
 

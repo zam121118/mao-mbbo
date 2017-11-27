@@ -177,6 +177,171 @@ def FFDSum(bins, objects):
     print "FFDSum used time is {} \n used the number of HMs is {}".format(used_time, len(num))
     return (bins, used_time)
 
+def FFDProd(bins, objects):
+    '''
+    @param: bins 代表当前系统状态
+            objects 代表待放入bin的容器
+    @return: 安排好所有objects的集群bins状态
+    '''
+
+    print " \n进入 FFDProd() 方法" 
+
+
+    time0 = time.time()
+
+    # d-v-h架构下新增阶段希望做到一定节能，即尽可能使用当前已有的VM，尽量不去开启新的HM
+    # 情况1： 新增容器以VM作为直接node考虑，为当前所有可容纳running VM打分，分最高者放入
+    # 情况2： all running vms均无法放入，init_VM产生新VM，再对所有HM打分，分最高者放入
+
+    for x in xrange(len(objects['c_rp'])):
+        object_CPU, object_MEM, i = objects['c_rp'][x], objects['c_rm'][x], objects['replicas'][x]
+        
+        while i>0:
+            # 对该object(容器)计算所有bins（VMs）得分
+            weightedVMBins = weightVMBins_FFDProd(bins, object_CPU, object_MEM)
+
+            # 至少有VM可以容纳该Object时，放入并更改参数
+            if len(weightedVMBins) > 0:
+                # 获取得分最多bins的编号
+                vm_suffix = max(weightedVMBins, key=weightedVMBins.get)
+
+                # 且该VM已经在当前集群中有映射HM
+                if vm_suffix in bins['map_v_h']:
+                    hm_suffix = bins['map_v_h'][vm_suffix]
+
+                # 否则，需要为该VM找寻可以hosted 的HM,并更新资源
+                else:
+                    hm_suffix = find_HM(bins, bins['v_rp'][vm_suffix], bins['v_rm'][vm_suffix], vm_suffix)
+
+                # 更新放入该object（容器）造成的bin（VM）资源变化
+                bins['v_p_cost'][0][vm_suffix] += object_CPU
+                bins['v_m_cost'][0][vm_suffix] += object_MEM
+                
+                # 将容器及其放置位置加入‘population’中
+                bins['population'][0].append([vm_suffix, hm_suffix])
+                bins['c_rp'].append(object_CPU)
+                bins['c_rm'].append(object_MEM)
+
+                # 已经解决掉一个object
+                i -= 1 
+                continue
+                
+            # 否则，当前集群没有能容纳该object（容器）的bin（VM）
+            else:
+                # 随机生成一个足以容纳该容器的VM, 获取编号
+                # vm = create_VM(object_CPU, object_MEM, rp_option, rm_option)
+                vm = create_VM(object_CPU, object_MEM, vm_option)
+                vm_suffix = len(bins['v_p_cost'][0])
+
+                # 为该VM找寻HM,并更新HM资源变动及map_v_h
+                hm_suffix = find_HM(bins, vm['rp'], vm['rm'], vm_suffix)
+
+                # 更新放入容器后造成的VM资源变化
+                bins['v_p_cost'][0].append(object_CPU)
+                bins['v_m_cost'][0].append(object_MEM)
+
+                # 追加系统容器、vm数量及资源分布
+                bins['c_rp'].append(object_CPU)
+                bins['c_rm'].append(object_MEM)
+                bins['v_rp'].append(vm['rp'])
+                bins['v_rm'].append(vm['rm'])
+
+                # 更新‘population’、‘map_v_h’
+                bins['population'][0].append([vm_suffix, hm_suffix])
+
+                # 已经解决掉一个object
+                i -= 1
+                continue
+
+    # 说明性数据统计
+    used_time = time.time() - time0
+    print "Dot-Prod used time is {} \n used the number of HMs is {}".format(used_time, len(num))
+    return (bins, used_time)
+
+def func_L2(bins, objects):
+    '''
+    @param: bins 代表当前系统状态
+            objects 代表待放入bin的容器
+    @return: 安排好所有objects的集群bins状态
+    '''
+
+    print " \n进入 func_L2 方法" 
+
+
+    time0 = time.time()
+
+    # d-v-h架构下新增阶段希望做到一定节能，即尽可能使用当前已有的VM，尽量不去开启新的HM
+    # 情况1： 新增容器以VM作为直接node考虑，为当前所有可容纳running VM打分，分最高者放入
+    # 情况2： all running vms均无法放入，init_VM产生新VM，再对所有HM打分，分最高者放入
+
+    for x in xrange(len(objects['c_rp'])):
+        object_CPU, object_MEM, i = objects['c_rp'][x], objects['c_rm'][x], objects['replicas'][x]
+        
+        while i>0:
+            # 对该object(容器)计算所有bins（VMs）得分
+            weightedVMBins = weightVMBins_L2(bins, object_CPU, object_MEM)
+
+            # 至少有VM可以容纳该Object时，放入并更改参数
+            if len(weightedVMBins) > 0:
+                # 获取得分最多bins的编号
+                vm_suffix = max(weightedVMBins, key=weightedVMBins.get)
+
+                # 且该VM已经在当前集群中有映射HM
+                if vm_suffix in bins['map_v_h']:
+                    hm_suffix = bins['map_v_h'][vm_suffix]
+
+                # 否则，需要为该VM找寻可以hosted 的HM,并更新资源
+                else:
+                    hm_suffix = find_HM(bins, bins['v_rp'][vm_suffix], bins['v_rm'][vm_suffix], vm_suffix)
+
+                # 更新放入该object（容器）造成的bin（VM）资源变化
+                bins['v_p_cost'][0][vm_suffix] += object_CPU
+                bins['v_m_cost'][0][vm_suffix] += object_MEM
+                
+                # 将容器及其放置位置加入‘population’中
+                bins['population'][0].append([vm_suffix, hm_suffix])
+                bins['c_rp'].append(object_CPU)
+                bins['c_rm'].append(object_MEM)
+
+                # 已经解决掉一个object
+                i -= 1 
+                continue
+                
+            # 否则，当前集群没有能容纳该object（容器）的bin（VM）
+            else:
+                # 随机生成一个足以容纳该容器的VM, 获取编号
+                # vm = create_VM(object_CPU, object_MEM, rp_option, rm_option)
+                vm = create_VM(object_CPU, object_MEM, vm_option)
+                vm_suffix = len(bins['v_p_cost'][0])
+
+                # 为该VM找寻HM,并更新HM资源变动及map_v_h
+                hm_suffix = find_HM(bins, vm['rp'], vm['rm'], vm_suffix)
+
+                # 更新放入容器后造成的VM资源变化
+                bins['v_p_cost'][0].append(object_CPU)
+                bins['v_m_cost'][0].append(object_MEM)
+
+                # 追加系统容器、vm数量及资源分布
+                bins['c_rp'].append(object_CPU)
+                bins['c_rm'].append(object_MEM)
+                bins['v_rp'].append(vm['rp'])
+                bins['v_rm'].append(vm['rm'])
+
+                # 更新‘population’、‘map_v_h’
+                bins['population'][0].append([vm_suffix, hm_suffix])
+
+                # 已经解决掉一个object
+                i -= 1
+                continue
+
+    # 说明性数据统计
+    num = set(bins['map_v_h'].values())
+    used_time = time.time() - time0
+    print "Dot-Prod used time is {} \n used the number of HMs is {}".format(used_time, len(num))
+    return (bins, used_time)
+
+
+
 
 def find_HM(bins, v_rp, v_rm, vm_suffix, handle):
     '''
@@ -297,6 +462,7 @@ def weightVMBins_DotProd(bins, object_CPU, object_MEM):
         bin_reservedMEM = bins['v_rm'][j] - bins['v_m_cost'][0][j]
         if bin_reservedCPU < object_CPU or bin_reservedMEM < object_MEM:
             continue
+        # Dot-Prod衡量法一（不加权求夹角余弦值，效果更好点）： 以向量夹角余弦值越大作为越好的评判依据
         cosScore = 1          # 即夹角最小0度
         if object_CPU > 0 and object_MEM > 0:
             # 2 vector数量积
@@ -309,6 +475,17 @@ def weightVMBins_DotProd(bins, object_CPU, object_MEM):
             cosScore = dotproduct / math.sqrt(norm_object*norm_bin)
         if cosScore <= 1:
             weightedVMBins.setdefault(j, cosScore)
+        
+        # Dot-Prod衡量法二（加权求点积）： 以demands、remainning向量点积值即各维资源权重乘积越大作为越好的评判依据
+        # dotScore = 2.0
+        # if object_CPU > 0 and object_MEM > 0:
+        #     # w_cpu, w_mem CPU、MEM各维资源权重的计算
+        #     w_cpu = (bins['v_p_cost'][0][j] + object_CPU) / bins['v_rp'][j]
+        #     w_mem = (bins['v_m_cost'][0][j] + object_MEM) / bins['v_rm'][j]
+
+        #     dotScore = w_cpu * object_CPU * bin_reservedCPU + w_mem * object_MEM * bin_reservedMEM
+        # if dotScore <= 2.0:
+        #     weightedVMBins.setdefault(j, dotScore)
     return weightedVMBins
 
 
@@ -326,6 +503,7 @@ def weightHMBins_DotProd(bins, object_CPU, object_MEM):
         bin_reservedMEM = 1.0 - bins['h_m_cost'][0][j]
         if bin_reservedCPU < object_CPU or bin_reservedMEM < object_MEM:
             continue
+        # Dot-Prod衡量法一（不加权求夹角余弦值，效果更好点）： 以向量夹角余弦值越大作为越好的评判依据
         cosScore = 1       # 即最大值，夹角为0度
         if object_CPU > 0 and object_MEM > 0:
             # 2 vector数量积
@@ -336,8 +514,97 @@ def weightHMBins_DotProd(bins, object_CPU, object_MEM):
             norm_bin = bin_reservedCPU**2 + bin_reservedMEM**2
             # bins cos得分
             cosScore = dotproduct / math.sqrt(norm_object*norm_bin)
-        if cosScore <= 1:
+        if cosScore <= 1.0:
             weightedHMBins.setdefault(j, cosScore)
+
+        # Dot-Prod衡量法二（加权求点积）： 以demands、remainning向量点积值即各维资源权重乘积越大作为越好的评判依据
+        # dotScore = 2.0
+        # if object_CPU > 0 and object_MEM > 0:
+        #     # w_cpu, w_mem CPU、MEM各维资源权重计算
+        #     w_cpu = (bins['h_p_cost'][0][j] + object_CPU) / 1.0
+        #     w_mem = (bins['h_m_cost'][0][j] + object_MEM) / 1.0
+        #     dotScore = w_cpu * object_CPU * bin_reservedCPU + w_mem * object_MEM * bin_reservedMEM
+        # if dotScore <= 2.0:
+        #     weightedHMBins.setdefault(j, dotScore)
+    return weightedHMBins
+
+def weightVMBins_FFDProd (bins, object_CPU, object_MEM):
+    '''
+    计算集群bins(VMs)中所有bin的权重，并返回weightedVMBins记录有各个node(VM)得分的weightedVMBins
+    '''
+    print "\n 进入weightVMBins_FFDProd() 方法"
+
+    weightedVMBins = {}
+    for j in xrange(len(bins['v_p_cost'][0])):
+        bin_reservedCPU = bins['v_rp'][j] - bins['v_p_cost'][0][j]
+        bin_reservedMEM = bins['v_rm'][j] - bins['v_m_cost'][0][j]
+        if bin_reservedCPU < object_CPU or bin_reservedMEM < object_MEM:
+                continue
+        prodScore = (bins['v_p_cost'][0][j] + object_CPU) * (bins['v_m_cost'][0][j] + object_MEM)
+        if prodScore <= 1.0:
+                weightedVMBins.setdefault(j, prodScore)
+    return weightedVMBins
+
+
+def weightHMBins_FFDProd(bins, object_CPU, object_MEM):
+    '''
+    计算集群bins(HMs)中所有bin的权重，并返回weightedHMBins记录有各个node(HM)得分的weightedHMBins
+    '''
+    print "\n 进入weightHMBins_FFDProd() 方法"
+
+
+    weightedHMBins = {}
+    for j in xrange(len(bins['h_p_cost'][0])):
+        bin_reservedCPU = 1.0 - bins['h_p_cost'][0][j]
+        bin_reservedMEM = 1.0 - bins['h_m_cost'][0][j]
+        if bin_reservedCPU < object_CPU or bin_reservedMEM < object_MEM:
+            continue
+        prodScore = (bins['h_p_cost'][0][j] + object_CPU) * (bins['h_m_cost'][0][j] + object_MEM)
+        if prodScore <= 1.00:
+            weightedHMBins.setdefault(j, prodScore)
+    return weightedHMBins
+
+
+def weightVMBins_L2(bins, object_CPU, object_MEM):
+    '''
+    计算集群bins(VMs)中所有bin的权重，并返回weightedVMBins记录有各个node(VM)得分的weightedVMBins
+    '''
+    print "\n 进入weightVMBins_L2() 方法"
+
+    weightedVMBins = {}
+    for j in xrange(len(bins['v_p_cost'][0])):
+        bin_reservedCPU = bins['v_rp'][j] - bins['v_p_cost'][0][j]
+        bin_reservedMEM = bins['v_rm'][j] - bins['v_m_cost'][0][j]
+        if bin_reservedCPU < object_CPU or bin_reservedMEM < object_MEM:
+            continue
+        distanceScore = (bins['v_p_cost'][0][j] + object_CPU) / bins['v_rp'][j] * (bin_reservedCPU - object_CPU)**2 + \
+        (bins['v_m_cost'][0][j] + object_MEM) / bins['v_rm'][j] * (bin_reservedMEM - object_MEM)**2
+        # 不加权求demand、remainning向量间鸥几里得距离效果不如加权好
+        # distanceScore = (bin_reservedCPU - object_CPU)**2 + (bin_reservedMEM - object_MEM)**2
+        if distanceScore <= 2.00:
+            weightedVMBins.setdefault(j, distanceScore)
+    return weightedVMBins
+
+
+def weightHMBins_L2(bins, object_CPU, object_MEM):
+    '''
+    计算集群bins(HMs)中所有bin的权重，并返回weightedHMBins记录有各个node(HM)得分的weightedHMBins
+    '''
+    print "\n 进入weightHMBins_L2() 方法"
+
+
+    weightedHMBins = {}
+    for j in xrange(len(bins['h_p_cost'][0])):
+        bin_reservedCPU = 1.0 - bins['h_p_cost'][0][j]
+        bin_reservedMEM = 1.0 - bins['h_m_cost'][0][j]
+        if bin_reservedCPU < object_CPU or bin_reservedMEM < object_MEM:
+            continue
+        distanceScore = (bins['h_p_cost'][0][j] + object_CPU) / 1.0 * (bin_reservedCPU - object_CPU)**2 + \
+        (bins['h_m_cost'][0][j] + object_MEM) / 1.0 * (bin_reservedMEM - object_MEM)**2
+        # 不加权求demand、remainning向量间鸥几里得距离效果不如加权好
+        # distanceScore = (bin_reservedCPU - object_CPU)**2 + (bin_reservedMEM - object_MEM)**2
+        if distanceScore <= 2.00:
+            weightedHMBins.setdefault(j, distanceScore)
     return weightedHMBins
 
 
@@ -498,6 +765,57 @@ def compositive_func(bins, objects, s0, handle0, handle1):
     return (bins, used_time)
 
 
+def createJSON(cost, key, addtion_scale, file_name):
+    '''
+    goal: 构造符合Echarts平行坐标图的json数据,并覆盖写入file_name文件
+    params: cost 算法运行后计算所得代价(字典)
+            key  描述具体为哪种算法
+            addtion_sacle  指明容器增量规模（个）sum(addtion0['replicas'])
+    '''
+    # 构造并行坐标数据类型
+    data = {
+        "FFDSum":[
+
+        ],
+        "FFDProd":[
+
+        ],
+        "Dot_Prod":[
+
+        ],
+        "L2":[
+
+        ]
+    }
+    # 构造填入各个算法列表的序列，该顺序必须严格按照平行坐标顺序：
+    # addtion_scale、power_cost、v_balance_cost、v_average_load_index、
+    # h_balance_cost、h_average_load_index、used_hms、used_vms、used_time
+    seq_cost = [0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0.0]
+    # 根据形参key补充cost到data中
+    if key in data.keys():
+        seq_cost[0] = addtion_scale
+        seq_cost[1] = cost['power_cost']
+        seq_cost[2] = cost['v_balance_cost']
+        seq_cost[3] = cost['v_average_load_index']
+        seq_cost[4] = cost['h_balance_cost']
+        seq_cost[5] = cost['h_average_load_index']
+        seq_cost[6] = cost['used_hms']
+        seq_cost[7] = cost['used_vms']
+        seq_cost[8] = cost['used_time']
+        # 填入data字典中
+        data[key].append(seq_cost)
+    else:
+        print "当填入{}时，JSON文件无此key值".format(key)
+        sys.exit()
+        
+    # 导出为json文件
+    with open('{}.json'.format(file_name), 'w') as f:
+        f.flush()
+        json.dump(data, f, indent=2)
+    return True
+
+
+
 if __name__ == '__main__':
 
     # 一、 1. 设置可选的虚机尺寸
@@ -522,29 +840,44 @@ if __name__ == '__main__':
     #     'replicas': [4, 0, 4, 3, 0]
     # }
 
-    # 二、 循环计算不同初始集群下，各算法表现出来代价指标
+    # 二、 构造输出json文件
+
+
+    # 三、 循环计算不同初始集群下，各算法表现出来代价指标
     cycle = [50]*5 + [100]*5 + [200]*5 + [300]*5 + [500]*5 + [800]*5 + [1000]*5 + [3000]*5 + [5000]*5 + [8000]*5 + [10000]*5
     for i in cycle:
-        # 2. 初始化集群状态及新增序列，计算初始集群的各项指标代价，并深拷贝一份作为第二个算法实参
+        # 2. 初始化集群状态及新增序列，计算初始集群的各项指标代价，并深拷贝一份作为其他算法实参
         init_popu0, addtion0 = main_init(100, 1.0, i)
-        init_popu1 = copy.deepcopy(init_popu0)
+        init_popu1, init_popu2, init_popu3 = copy.deepcopy(init_popu0), copy.deepcopy(init_popu0), copy.deepcopy(init_popu0)
         init_cost = compute_costs(init_popu0)
         # s0 = 'Start: \nThe initial Bins = {} \n\n\n The initial cost = {}\n'.format(init_popu0 ,init_cost)
-        s0 = 'Start: \nWhen len(addtion0) = {},\nThe initial cost = {}\n'.format(i, init_cost)
+        s0 = '\n\nStart: \nWhen len(addtion0) = {},\nThe initial cost = {}\n'.format(i, init_cost)
 
         # 3. 分别在两个相同集群状态上执行调度算法，并分别计算最终集群的各项代价
         bins0, used_time0 = compositive_func(init_popu0, addtion0, 'FFDSum()', weightVMBins_FFDSum, weightHMBins_FFDSum)
-        bins1, used_time1 = compositive_func(init_popu1, addtion0, 'Dot-Prod()', weightVMBins_DotProd, weightHMBins_DotProd)
-        cost0, cost1 = compute_costs(bins0), compute_costs(bins1)
-        cost0['used_time'], cost1['used_time'] = used_time0, used_time1
+        bins1, used_time1 = compositive_func(init_popu1, addtion0, 'FFDProd', weightVMBins_FFDProd, weightHMBins_FFDProd)
+        bins2, used_time2 = compositive_func(init_popu2, addtion0, 'Dot-Prod()', weightVMBins_DotProd, weightHMBins_DotProd)
+        bins3, used_time3 = compositive_func(init_popu3, addtion0, 'func_L2()', weightVMBins_L2, weightHMBins_L2)
+        cost0, cost1, cost2, cost3 = compute_costs(bins0), compute_costs(bins1), compute_costs(bins2), compute_costs(bins3)
+        cost0['used_time'], cost1['used_time'], cost2['used_time'], cost3['used_time'] = used_time0, used_time1, used_time2, used_time3
         
         # 4. 存档记录（s2记录比较详细，用来检验算法运行正确性）
         # s2 = '\n\n\nEnd:\n\n\nThe FFDSum cost of new state = {}\n\nThe FFDSum_Bins = {}  \
         # \n\n\nThe Dot-prod cost of new state = {}\n\nThe Dot-Prod_Bins = {} '.format(cost0, bins0, cost1, bins1)
-        s1 = '\n\n\nEnd:\n\n\nThe FFDSum cost of new state = {}\n\n\nThe Dot-prod cost of new state = {}\n\n'.format(cost0, cost1)
-        
-        # print s0,s1
-        with open('addtion_phase//tmp.py','a') as f:
-            f.flush()
-            f.write(s0)
-            f.write(s1)
+        # s1 = '\n\n\nEnd: \
+        # \n\nThe FFDSum cost of new state = {}   \
+        # \n\nThe FFDProd cost of new state = {}  \
+        # \n\nThe Dot-prod cost of new state = {} \
+        # The func_L2 cost of new state = {}'.format(cost0, cost1, cost2, cost3)      
+        # with open('addtion_phase//tmp.py','a') as f:
+        #     f.flush()
+        #     f.write(s0)
+        #     f.write(s1)
+
+        # 5. 写入json文件，用于前端展示算法结果对比
+        addtion_scale = sum(addtion0['replicas'])
+        createJSON(cost0, 'FFDSum', addtion_scale, 'addtion-demo')
+        createJSON(cost1, 'FFDProd', addtion_scale, 'addtion-demo')
+        createJSON(cost2, 'Dot_Prod', addtion_scale, 'addtion-demo')
+        createJSON(cost3, 'L2', addtion_scale, 'addtion-demo')
+
