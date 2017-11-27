@@ -500,7 +500,7 @@ def compositive_func(bins, objects, s0, handle0, handle1):
 
 if __name__ == '__main__':
 
-    # 1. 设置可选的虚机尺寸
+    # 一、 1. 设置可选的虚机尺寸
     vm_option = [(0.3, 0.3), (0.5, 0.4), (0.6, 0.5), (0.8, 0.7), (1.0, 0.8), (1.0, 1.0)]
 
     # 初始集群状态及新增序列，test1
@@ -522,25 +522,29 @@ if __name__ == '__main__':
     #     'replicas': [4, 0, 4, 3, 0]
     # }
 
-    # 2. 初始化集群状态及新增序列，计算初始集群的各项指标代价，并深拷贝一份作为第二个算法实参
-    init_popu0, addtion0 = main_init(40, 1.0, 40)
-    init_popu1 = copy.deepcopy(init_popu0)
-    init_cost = compute_costs(init_popu0)
-    s0 = 'Start: \nThe initial Bins = {} \n\n\n The initial cost = {}\n'.format(init_popu0 ,init_cost)
+    # 二、 循环计算不同初始集群下，各算法表现出来代价指标
+    cycle = [50]*5 + [100]*5 + [200]*5 + [300]*5 + [500]*5 + [800]*5 + [1000]*5 + [3000]*5 + [5000]*5 + [8000]*5 + [10000]*5
+    for i in cycle:
+        # 2. 初始化集群状态及新增序列，计算初始集群的各项指标代价，并深拷贝一份作为第二个算法实参
+        init_popu0, addtion0 = main_init(100, 1.0, i)
+        init_popu1 = copy.deepcopy(init_popu0)
+        init_cost = compute_costs(init_popu0)
+        # s0 = 'Start: \nThe initial Bins = {} \n\n\n The initial cost = {}\n'.format(init_popu0 ,init_cost)
+        s0 = 'Start: \nWhen len(addtion0) = {},\nThe initial cost = {}\n'.format(i, init_cost)
 
-    # 3. 分别在两个相同集群状态上执行调度算法，并分别计算最终集群的各项代价
-    bins0, used_time0 = compositive_func(init_popu0, addtion0, 'FFDSum()', weightVMBins_FFDSum, weightHMBins_FFDSum)
-    bins1, used_time1 = compositive_func(init_popu1, addtion0, 'Dot-Prod()', weightVMBins_DotProd, weightHMBins_DotProd)
-    cost0, cost1 = compute_costs(bins0), compute_costs(bins1)
-    cost0['used_time'], cost1['used_time'] = used_time0, used_time1
-    
-    # 4. 存档记录（s2记录比较详细，用来检验算法运行正确性）
-    s2 = '\n\n\nEnd:\n\n\nThe FFDSum cost of new state = {}\n\nThe FFDSum_Bins = {}  \
-    \n\n\nThe Dot-prod cost of new state = {}\n\nThe Dot-Prod_Bins = {} '.format(cost0, bins0, cost1, bins1)
-    # s1 = '\n\n\nEnd:\n\n\nThe FFDSum cost of new state = {}\n\n\nThe Dot-prod cost of new state = {}'.format(cost0, cost1)
-    
-    # print s0,s1
-    with open('addtion_phase//tmp.py','a') as f:
-        f.flush()
-        f.write(s0)
-        f.write(s2)
+        # 3. 分别在两个相同集群状态上执行调度算法，并分别计算最终集群的各项代价
+        bins0, used_time0 = compositive_func(init_popu0, addtion0, 'FFDSum()', weightVMBins_FFDSum, weightHMBins_FFDSum)
+        bins1, used_time1 = compositive_func(init_popu1, addtion0, 'Dot-Prod()', weightVMBins_DotProd, weightHMBins_DotProd)
+        cost0, cost1 = compute_costs(bins0), compute_costs(bins1)
+        cost0['used_time'], cost1['used_time'] = used_time0, used_time1
+        
+        # 4. 存档记录（s2记录比较详细，用来检验算法运行正确性）
+        # s2 = '\n\n\nEnd:\n\n\nThe FFDSum cost of new state = {}\n\nThe FFDSum_Bins = {}  \
+        # \n\n\nThe Dot-prod cost of new state = {}\n\nThe Dot-Prod_Bins = {} '.format(cost0, bins0, cost1, bins1)
+        s1 = '\n\n\nEnd:\n\n\nThe FFDSum cost of new state = {}\n\n\nThe Dot-prod cost of new state = {}\n\n'.format(cost0, cost1)
+        
+        # print s0,s1
+        with open('addtion_phase//tmp.py','a') as f:
+            f.flush()
+            f.write(s0)
+            f.write(s1)
