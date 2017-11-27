@@ -47,7 +47,7 @@
         }
     };
     
-    var option = {
+    option = {
         backgroundColor: '#333',
         legend: {
             bottom: 30,
@@ -176,11 +176,12 @@
         dataFFDProd = data.FFDProd;
         dataDotProd = data.Dot_Prod;
         dataL2 = data.L2;
+        // 使用刚指定的配置项和数据显示图表
+        myChart.setOption(option);
+
     },'json');
 
 
-    // 使用刚指定的配置项和数据显示图表
-    myChart.setOption(option);
 
     // 平行坐标数据序列为addtion_scale、power_cost、v_balance_cost、v_average_load_index
     // h_balance_cost、h_average_load_index、used_hms、used_vms、used_time
