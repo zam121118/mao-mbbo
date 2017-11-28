@@ -5,7 +5,7 @@
     <title>Contrast of docker scheduler strategies</title>
     <!-- 引入 ECharts 文件 -->
     <script type="text/javascript" src="./static/lib/echarts/3.8.4/echarts.min.js"></script>
-    <script type="text/javascript" src="./static/lib/echarts/3.5.3/theme-dark.js"></script>
+    <script type="text/javascript" src="./static/lib/echarts/3.8.4/dark.js"></script>
     <!--引入jQuery-->
     <script type="text/javascript" src="./static/lib/jquery/jquery-2.1.1.js"></script>
     <script type="text/javascript" src="./static/lib/jqueryui/humanlity/jquery-ui.js"></script>
@@ -18,17 +18,17 @@
 </head>
 <body>
     <!--初始化一个DOM-->
-    <div id="main" style="width: 600px; height:400px;"></div>
+    <div id="main" style="width: 1000px; height:500px;"></div>
     <script type="text/javascript">
 
     // 基于准备好的dom,初始化echarts实例
     var myChart = echarts.init(document.getElementById('main'));
 
     // 使用指定的配置项指定parallel aqi option的配置项和数据
-    var dataFFDsum = null;
-    var dataFFDProd = null;
-    var dataDotProd = null;
-    var dataL2= null;
+    // var dataFFDSum;
+    // var dataFFDProd;
+    // var dataDotProd;
+    // var dataL2;
     var schema = [
         {name:'scale', index: 0, text:'增量规模'},
         {name:'Power', index: 1, text:'能耗'},
@@ -49,12 +49,43 @@
     
     option = {
         backgroundColor: '#333',
+        title:{
+            show:true,
+            text:'Contrast of herustics for containers addtion'
+        },
         legend: {
             bottom: 30,
-            data: ['FFDSum', 'FFDProd', 'Dot-Prod', 'L2'],
+            type: 'scroll',
+            //data: ['FFDSum', 'FFDProd', 'Dot-Prod', 'L2'],
+            data:[{
+                name:'FFDSum',
+                icon:'circle',
+                textStyle:{
+                    color:'red'
+                }
+            },{
+                name:'FFDProd',
+                icon:'circle',
+                textStyle:{
+                    color:'blue'
+                }
+            },{
+                name:'Dot-Prod',
+                icon:'circle',
+                textStyle:{
+                    color:'yellow'
+                }
+            },{
+                name:'L2',
+                icon:'circle',
+                textStyle:{
+                    color:'black'
+                }
+            }],
             itemGap: 20,
             textStyle: {
                 color: '#fff',
+                fontStyle: 'italic',
                 fontSize: 14
             }
         },
@@ -140,46 +171,130 @@
                 name: 'FFDSum',
                 type: 'parallel',
                 lineStyle: lineStyle,
-                data: dataFFDsum
+                data: []
             },
             {
                 name: 'FFDProd',
                 type: 'parallel',
                 lineStyle: lineStyle,
-                data: dataFFDProd
+                data: []
             },
             {
                 name: 'Dot-Prod',
                 type: 'parallel',
                 lineStyle: lineStyle,
-                data: dataDotProd
+                data: []
             },
             {
                 name: 'L2',
                 type: 'parallel',
                 lineStyle: lineStyle,
-                data: dataL2
+                data: []
             }
         ]
     };
 
+    // 显示标题、图例和坐标轴
+    myChart.setOption(option);
+
 
     // 异步加载数据get_data()
-    // $.get('./addtion-demo.json','json').done(function (data){
-    //     dataFFDsum = data.FFDSum;
-    //     dataFFDProd = data.FFDProd;
-    //     dataDotProd = data.Dot_Prod;
-    //     dataL2 = data.L2;
-    // });
     $.get('./addtion-demo.json',{},function (data){
-        dataFFDsum = data.FFDSum;
+        console.log("进入数据加载方法");
+        dataFFDSum = data.FFDSum;
         dataFFDProd = data.FFDProd;
         dataDotProd = data.Dot_Prod;
         dataL2 = data.L2;
+        console.log(data);
+        
         // 使用刚指定的配置项和数据显示图表
-        myChart.setOption(option);
-
+        myChart.setOption({
+            series: [
+                {
+                    name: 'FFDSum',
+                    type: 'parallel',
+                    lineStyle: lineStyle,
+                    data: dataFFDSum
+                },
+                {
+                    name: 'FFDProd',
+                    type: 'parallel',
+                    lineStyle: lineStyle,
+                    data: dataFFDProd
+                },
+                {
+                    name: 'Dot-Prod',
+                    type: 'parallel',
+                    lineStyle: lineStyle,
+                    data: dataDotProd
+                },
+                {
+                    name: 'L2',
+                    type: 'parallel',
+                    lineStyle: lineStyle,
+                    data: dataL2
+                }
+            ]
+        });
     },'json');
+
+    // 异步加载数据
+    $.get('./addtion-demo.json').done(function (data) {
+        // 填入数据
+        console.log("进入数据加载方法");
+        dataFFDSum = data.FFDSum;
+        dataFFDProd = data.FFDProd;
+        dataDotProd = data.Dot_Prod;
+        dataL2 = data.L2;
+        console.log(data);
+        
+        // 使用刚指定的配置项和数据显示图表
+        myChart.setOption({
+            series: [
+                {
+                    name: 'FFDSum',
+                    type: 'parallel',
+                    lineStyle: lineStyle,
+                    data: dataFFDSum
+                },
+                {
+                    name: 'FFDProd',
+                    type: 'parallel',
+                    lineStyle: lineStyle,
+                    data: dataFFDProd
+                },
+                {
+                    name: 'Dot-Prod',
+                    type: 'parallel',
+                    lineStyle: lineStyle,
+                    data: dataDotProd
+                },
+                {
+                    name: 'L2',
+                    type: 'parallel',
+                    lineStyle: lineStyle,
+                    data: dataL2
+                }
+            ]
+        });
+
+    });
+
+    // $(function(){
+    //     // 读入数据
+    //     $.ajax({url:"addtion-demo.json", type:"GET", dataType:"json", success: function(data){
+    //         console.log("进入方法");
+    //         dataFFDSum = data.FFDSum;
+    //         dataFFDProd = data.FFDProd;
+    //         dataDotProd = data.Dot_Prod;
+    //         dataL2 = data.L2;
+    //         console.log(data);
+    //         // // 基于准备好的dom,初始化echarts实例
+    //         // var myChart = echarts.init(document.getElementById('main'));
+    //          // 使用刚指定的配置项和数据显示图表
+    //         myChart.setOption(option);
+    //     }});
+    // });
 
 
 
