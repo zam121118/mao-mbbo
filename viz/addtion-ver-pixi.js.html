@@ -50,7 +50,7 @@
     option = {
         backgroundColor: '#333',
         title:{
-            show:true,
+            show:false,
             text:'Contrast of herustics for containers addtion'
         },
         legend: {
@@ -79,7 +79,7 @@
                 name:'L2',
                 icon:'circle',
                 textStyle:{
-                    color:'black'
+                    color:'green'
                 }
             }],
             itemGap: 20,
@@ -90,6 +90,8 @@
             }
         },
         tooltip: {
+            trigger:'item',
+            triggerOn: 'mousemove',
             padding: 10,
             backgroundColor: '#222',
             borderColor: '#777',
@@ -111,7 +113,7 @@
         // dataZoom: {
         //     show: true,
         //     orient: 'vertical',
-        //     parallelAxisIndex: [0]
+        //     parallelAxisIndex: [0,1,2,3,4,5,6,7]
         // },
         parallelAxis: [
             {dim: 0, name: schema[0].text, inverse: true, nameLocation: 'start'},
@@ -123,14 +125,25 @@
             {dim: 6, name: schema[6].text},
             {dim: 7, name: schema[7].text}
         ],
+        // visualMap: {
+        //     show: true,
+        //     min: 0,
+        //     max: 500,
+        //     dimension: 0,
+        //     inRange: {
+        //         color: ['#d94e5d','#eac736','#50a3ba'].reverse(),
+        //         colorAlpha: [0, 1]
+        //     }
+        // },
         visualMap: {
-            show: true,
             min: 0,
-            max: 150,
-            dimension: 2,
-            inRange: {
-                color: ['#d94e5d','#eac736','#50a3ba'].reverse(),
-                // colorAlpha: [0, 1]
+            max: 500,
+            // pieces 自定义分段区间
+            splitNumber: 5,
+            dimension: 0,
+            color: ['#d94e5d','#eac736','#50a3ba'],
+            textStyle: {
+                color: '#fff'
             }
         },
         parallel: {
@@ -239,7 +252,7 @@
     },'json');
 
     // 异步加载数据
-    $.get('./addtion-demo.json').done(function (data) {
+    $.get('./addtion-demo1.json').done(function (data) {
         // 填入数据
         console.log("进入数据加载方法");
         dataFFDSum = data.FFDSum;
