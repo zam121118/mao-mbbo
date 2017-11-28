@@ -774,18 +774,10 @@ def createJSON(cost, key, addtion_scale, file_name):
     '''
     # 构造并行坐标数据类型
     data = {
-        "FFDSum":[
-
-        ],
-        "FFDProd":[
-
-        ],
-        "Dot_Prod":[
-
-        ],
-        "L2":[
-
-        ]
+        "FFDSum":[],
+        "FFDProd":[],
+        "Dot_Prod":[],
+        "L2":[]
     }
     # 构造填入各个算法列表的序列，该顺序必须严格按照平行坐标顺序：
     # addtion_scale、power_cost、v_balance_cost、v_average_load_index、
