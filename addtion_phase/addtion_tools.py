@@ -765,20 +765,14 @@ def compositive_func(bins, objects, s0, handle0, handle1):
     return (bins, used_time)
 
 
-def createJSON(cost, key, addtion_scale, file_name):
+def createJSON(data, cost, key, addtion_scale):
     '''
     goal: 构造符合Echarts平行坐标图的json数据,并覆盖写入file_name文件
     params: cost 算法运行后计算所得代价(字典)
             key  描述具体为哪种算法
             addtion_sacle  指明容器增量规模（个）sum(addtion0['replicas'])
     '''
-    # 构造并行坐标数据类型
-    data = {
-        "FFDSum":[],
-        "FFDProd":[],
-        "Dot_Prod":[],
-        "L2":[]
-    }
+
     # 构造填入各个算法列表的序列，该顺序必须严格按照平行坐标顺序：
     # addtion_scale、power_cost、v_balance_cost、v_average_load_index、
     # h_balance_cost、h_average_load_index、used_hms、used_vms、used_time
@@ -798,13 +792,8 @@ def createJSON(cost, key, addtion_scale, file_name):
         data[key].append(seq_cost)
     else:
         print "当填入{}时，JSON文件无此key值".format(key)
-        sys.exit()
-        
-    # 导出为json文件
-    with open('{}.json'.format(file_name), 'w') as f:
-        f.flush()
-        json.dump(data, f, indent=2)
-    return True
+        sys.exit()      
+    return data
 
 
 
@@ -833,10 +822,17 @@ if __name__ == '__main__':
     # }
 
     # 二、 构造输出json文件
-
+    # 构造并行坐标数据类型
+    data = {
+        "FFDSum":[],
+        "FFDProd":[],
+        "Dot_Prod":[],
+        "L2":[]
+    }
 
     # 三、 循环计算不同初始集群下，各算法表现出来代价指标
-    cycle = [50]*5 + [100]*5 + [200]*5 + [300]*5 + [500]*5 + [800]*5 + [1000]*5 + [3000]*5 + [5000]*5 + [8000]*5 + [10000]*5
+    # cycle = [50]*5 + [100]*5 + [200]*5 + [300]*5 + [500]*5 + [800]*5 + [1000]*5 + [3000]*5 + [5000]*5 + [8000]*5 + [10000]*5
+    cycle = [50, 100, 200, 300]
     for i in cycle:
         # 2. 初始化集群状态及新增序列，计算初始集群的各项指标代价，并深拷贝一份作为其他算法实参
         init_popu0, addtion0 = main_init(100, 1.0, i)
@@ -868,8 +864,12 @@ if __name__ == '__main__':
 
         # 5. 写入json文件，用于前端展示算法结果对比
         addtion_scale = sum(addtion0['replicas'])
-        createJSON(cost0, 'FFDSum', addtion_scale, 'addtion-demo')
-        createJSON(cost1, 'FFDProd', addtion_scale, 'addtion-demo')
-        createJSON(cost2, 'Dot_Prod', addtion_scale, 'addtion-demo')
-        createJSON(cost3, 'L2', addtion_scale, 'addtion-demo')
+        data = createJSON(data, cost0, 'FFDSum', addtion_scale)
+        data = createJSON(data, cost1, 'FFDProd', addtion_scale)
+        data = createJSON(data, cost2, 'Dot_Prod', addtion_scale)
+        data = createJSON(data, cost3, 'L2', addtion_scale)
+    # 导出为json文件
+    with open('.//viz//addtion-demo1.json', 'w') as f:
+        f.flush()
+        json.dump(data, f, indent=2)
 
