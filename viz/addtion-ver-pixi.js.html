@@ -18,7 +18,7 @@
 </head>
 <body>
     <!--初始化一个DOM-->
-    <div id="main" style="width: 1000px; height:500px;"></div>
+    <div id="main" style="width:1550px; height: 755px;"></div>
     <script type="text/javascript">
 
     // 基于准备好的dom,初始化echarts实例
@@ -42,6 +42,7 @@
     ];
     var lineStyle = {
         normal:{
+            // 如果数据量很大并且发生卡顿建议把lineStyle.normal.width 设为 0.5（或更小）， 可能显著改善性能。
             width: 1,
             opacity: 0.5
         }
@@ -49,25 +50,35 @@
     
     option = {
         backgroundColor: '#333',
-        title:{
-            show:false,
-            text:'Contrast of herustics for containers addtion'
+        color:['#dd8668', 'skyblue', 'yellow', 'green'],
+        title: {
+            text: 'Contrast of herustics for containers addtion',
+            subtext: 'data from experimental test',
+            sublink: 'https://github.com/zam121118/mao-mbbo/tree/addtion',
+            left: 'center',
+            top: 5,
+            itemGap: 0,
+            textStyle: {
+                color: '#eee'
+            },
         },
         legend: {
-            bottom: 30,
+            //bottom: 30,
+            top: 50,
+            right: 10,
             type: 'scroll',
             //data: ['FFDSum', 'FFDProd', 'Dot-Prod', 'L2'],
             data:[{
                 name:'FFDSum',
                 icon:'circle',
                 textStyle:{
-                    color:'red'
+                    color:'#dd8668'
                 }
             },{
                 name:'FFDProd',
                 icon:'circle',
                 textStyle:{
-                    color:'blue'
+                    color:'skyblue'
                 }
             },{
                 name:'Dot-Prod',
@@ -90,8 +101,8 @@
             }
         },
         tooltip: {
-            trigger:'item',
-            triggerOn: 'mousemove',
+            trigger:'axis',
+            triggerOn: 'click',
             padding: 10,
             backgroundColor: '#222',
             borderColor: '#777',
@@ -113,10 +124,12 @@
         // dataZoom: {
         //     show: true,
         //     orient: 'vertical',
-        //     parallelAxisIndex: [0,1,2,3,4,5,6,7]
+        //     parallelAxisIndex: [0]
         // },
+        
         parallelAxis: [
-            {dim: 0, name: schema[0].text, inverse: true, nameLocation: 'start'},
+            // {dim: 0, name: schema[0].text, inverse: true, nameLocation: 'start'},
+            {dim: 0, name: schema[0].text, inverse: true, max:30000, nameLocation: 'start'},
             {dim: 1, name: schema[1].text},
             {dim: 2, name: schema[2].text},
             {dim: 3, name: schema[3].text},
@@ -125,35 +138,46 @@
             {dim: 6, name: schema[6].text},
             {dim: 7, name: schema[7].text}
         ],
-        // visualMap: {
-        //     show: true,
-        //     min: 0,
-        //     max: 500,
-        //     dimension: 0,
-        //     inRange: {
-        //         color: ['#d94e5d','#eac736','#50a3ba'].reverse(),
-        //         colorAlpha: [0, 1]
-        //     }
-        // },
+
+        // 数据视觉化
         visualMap: {
-            min: 0,
-            max: 500,
+            type: 'continuous',
+            show: true, //false,
+            // min: 0,
+            // max: 300000,
             // pieces 自定义分段区间
-            splitNumber: 5,
+            pieces: [
+                {gt: 10000},            // (1500, Infinity]
+                {gt: 5000, lte: 10000},  // (900, 1500]
+                {gt: 500, lte: 5000},  // (310, 1000]
+                {gt: 200, lte: 500},   // (200, 300]
+                {gt: 100, lte: 200},       // (10, 200]
+                {lt: 100}                 // (-Infinity, 100)
+            ],
+            //splitNumber: 5,
             dimension: 0,
+            hoverLink: true,
             color: ['#d94e5d','#eac736','#50a3ba'],
+            // selectedMode: 'multiple',
             textStyle: {
                 color: '#fff'
             }
         },
         parallel: {
-            left: '5%',
-            right: '18%',
+            top: '20%',
+            left: '8%',
+            right: '13%',
             bottom: 100,
+            axisExpandable: true,
+            axisExpandCenter: 15,
+            axisExpandCount: 10,
+            axisExpandWidth: 60,
+            axisExpandTriggerOn: 'mousemove',
             parallelAxisDefault: {
                 type: 'value',
                 name: 'Power',
-                nameLocation: 'end',
+                nameLocation: 'start', //'end',
+                nameRotate: 25, // 
                 nameGap: 20,
                 nameTextStyle: {
                     color: '#fff',
@@ -170,11 +194,11 @@
                     }
                 },
                 splitLine: {
-                    show: false
+                    show: false,
                 },
                 axisLabel: {
                     textStyle: {
-                        color: '#fff'
+                        color: ['#fff']
                     }
                 }
             }
@@ -212,44 +236,44 @@
 
 
     // 异步加载数据get_data()
-    $.get('./addtion-demo.json',{},function (data){
-        console.log("进入数据加载方法");
-        dataFFDSum = data.FFDSum;
-        dataFFDProd = data.FFDProd;
-        dataDotProd = data.Dot_Prod;
-        dataL2 = data.L2;
-        console.log(data);
+    // $.get('./addtion-demo1.json',{},function (data){
+    //     console.log("进入数据加载方法");
+    //     dataFFDSum = data.FFDSum;
+    //     dataFFDProd = data.FFDProd;
+    //     dataDotProd = data.Dot_Prod;
+    //     dataL2 = data.L2;
+    //     console.log(data);
         
-        // 使用刚指定的配置项和数据显示图表
-        myChart.setOption({
-            series: [
-                {
-                    name: 'FFDSum',
-                    type: 'parallel',
-                    lineStyle: lineStyle,
-                    data: dataFFDSum
-                },
-                {
-                    name: 'FFDProd',
-                    type: 'parallel',
-                    lineStyle: lineStyle,
-                    data: dataFFDProd
-                },
-                {
-                    name: 'Dot-Prod',
-                    type: 'parallel',
-                    lineStyle: lineStyle,
-                    data: dataDotProd
-                },
-                {
-                    name: 'L2',
-                    type: 'parallel',
-                    lineStyle: lineStyle,
-                    data: dataL2
-                }
-            ]
-        });
-    },'json');
+    //     // 使用刚指定的配置项和数据显示图表
+    //     myChart.setOption({
+    //         series: [
+    //             {
+    //                 name: 'FFDSum',
+    //                 type: 'parallel',
+    //                 lineStyle: lineStyle,
+    //                 data: dataFFDSum
+    //             },
+    //             {
+    //                 name: 'FFDProd',
+    //                 type: 'parallel',
+    //                 lineStyle: lineStyle,
+    //                 data: dataFFDProd
+    //             },
+    //             {
+    //                 name: 'Dot-Prod',
+    //                 type: 'parallel',
+    //                 lineStyle: lineStyle,
+    //                 data: dataDotProd
+    //             },
+    //             {
+    //                 name: 'L2',
+    //                 type: 'parallel',
+    //                 lineStyle: lineStyle,
+    //                 data: dataL2
+    //             }
+    //         ]
+    //     });
+    // },'json');
 
     // 异步加载数据
     $.get('./addtion-demo1.json').done(function (data) {
