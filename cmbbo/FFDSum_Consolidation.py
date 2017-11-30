@@ -8,8 +8,12 @@ Digest : 模拟将当前集群的所有容器全部拿出，按照启发式算�
          此处打分考虑powerScore、balanceScore 2种分值之和作为总打分。
          powerScore即放入容器后各位资源使用率最大化
          balanceScore即计算类似dot-prod的求夹角余弦最大值
-更新 2017-11-30 15:40 pm临时决定将启发式打分方式更新为更能够负载均衡的dot-product方式
-主要用于weightVMBins、weightHMBins方法中
+更新 2017-11-30 15:40 pm临时决定将启发式打分方式更新为更能够负载均衡的dot-product方式，主要用于weightVMBins、weightHMBins方法中
+因此实验设计:
+      1. 在d-v-h架构下，仅用FFDSum对docker层进行聚合 VS 使用FFDSum同时聚合docker层和VM层；
+      2. 在d-v-h下，仅用mbbo对vm层进行聚合 VS 使用mbbo同时对docker、vm层随机求解聚合；
+      3. 在d-v-h下，比对同时以docker、vm作为调度单位时的FFDSum、Mbbo、GA算法等的聚合效果；
+
 '''
 
 

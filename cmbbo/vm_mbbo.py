@@ -3,6 +3,12 @@
 '''
 Created on 2017-4-12
 @author: Amy
+Goal: 这个mbbo算法是针对vm-hm架构的，单纯以VM为粒度的聚合算法
+      为了说明在d-v-h架构下，单纯考虑docker作为聚合单位 or vm单纯作为聚合单位
+      其聚合效果均不如同时以容器、vm作为聚合单位的效果好，因此实验设计:
+      1. 在d-v-h架构下，仅用FFDSum对docker层进行聚合 VS 使用FFDSum同时聚合docker层和VM层；
+      2. 在d-v-h下，仅用mbbo对vm层进行聚合 VS 使用mbbo同时对docker、vm层随机求解聚合；
+      3. 在d-v-h下，比对同时以docker、vm作为调度单位时的FFDSum、Mbbo、GA算法等的聚合效果；
 '''
 import time
 import random

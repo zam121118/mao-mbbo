@@ -6,7 +6,7 @@
 
 Created on 2017-5-2
 @author: Amy
-Attention: 这个版本的mbbo中，mbbode_migration方法和mbbode_mutation方法均在进化产生解后立即今次解是否有效判断
+Attention: 这个版本的mbbo中，mbbode_migration方法和mbbode_mutation方法均在进化产生解后立即进行解的有效性判断
 并在该方法内部直接对无效的解强制产生有效的解方法；这点与真实的mbbo思想有已。故废弃！
 '''
 import time
