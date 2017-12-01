@@ -403,7 +403,7 @@ if __name__ == '__main__':
     #     f.flush()
     #     f.write(s0)
     #     f.write(s1)
-    with open('addtion_phase//test.py','a') as f:
+    with open('cmbbo//test.py','a') as f:
         f.flush()
         f.write(s0)
         f.write(s1)
