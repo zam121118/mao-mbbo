@@ -3,11 +3,16 @@
 '''
 Date : 2017-5-20
 @Author : Amy
-Change: 
+Change: 2017-12-2
         现在更改mbbo用在Docker上的思路：
 obsolete ： 每次一旦被迁移率或者突变率选中，则一定选取满足约束条件的放置位置，
 now ：      直接进行突变以及迁移，只记录突变的位置，不进行实际资源占用以及约束解判断，
             在进化n代之后进行无效解的判断，以及采用类BFD算法去影响最差解
+因此实验设计:
+      1. 在d-v-h架构下，仅用FFDSum对docker层进行聚合 VS 使用FFDSum同时聚合docker层和VM层；
+      2. 在d-v-h下，仅用mbbo对vm层进行聚合 VS 使用mbbo同时对docker、vm层随机求解聚合；
+      3. 在d-v-h下，比对同时以docker、vm作为调度单位时的FFDSum、Mbbo、GA算法等的聚合效果；
+
 '''
 
 import time
@@ -21,23 +26,23 @@ import copy
 
 def init_Docker(rp_u, rm_u, p, num_var):
     '''
-    目标：随机生成测试虚拟机集中每个vm对cpu和mem的资源请求
+    目标：Gao Y提出的基于相关系数生成测试数据集的方式来生成VM，在此被我用来生成容器尺寸
     参数：
     rp_u是对cpu请求的指导变量，rm_u是对mem资源请求的指导变量，虚拟机对cpu，mem的最终需求量会以正态分布的形式落在以指导变量为期望的邻域附近
     p代表虚拟机的cpu和mem两种资源之间的相关系数，负责控制每台虚拟机对两种资源需求的关联程度
     num_var是需要生成的虚拟机个数
     '''
     # print "进入 init_Docker"
-    c_rp = range(num_var)                                                  # 记录每个虚拟机cpu,mem请求量
+    c_rp = range(num_var)         # 记录每个虚拟机cpu,mem请求量
     c_rm = range(num_var)
     for i in range(num_var):
         c_rp[i] = random.uniform(0, 2*rp_u)
         c_rm[i] = random.uniform(0, rm_u)
     for i in range(num_var):
         r = random.random()
-        if (r < p and c_rp[i] >= rp_u) or (r >= p and c_rp[i] < rp_u):     # p相关系数vm对cpu,mem请求量的相关性，值越大相关性越强
+        if (r < p and c_rp[i] >= rp_u) or (r >= p and c_rp[i] < rp_u): # p相关系数vm对cpu,mem请求量的相关性，值越大相关性越强
             c_rm[i] += rm_u
-        if c_rm[i] >= 1.0:                                               # 控制mem请求量合理性
+        if c_rm[i] >= 1.0:                            # 控制mem请求量合理性
             c_rm[i] -= 1.0
     #print "len(c_rp)= %s,len(c_rm) = %s" %(len(c_rp),len(c_rm))
     return c_rp, c_rm
@@ -55,7 +60,7 @@ def init_VM(c_rp, c_rm, rp_option, rm_option, num_var):
     v_rm = []
     i = 0
     while True:
-        if i == num_var:                        # 对num_var个docker选择随机的vm位置
+        if i == num_var:               # 循环中止条件
             #print "len(v_rp)= %s,len(v_rm) = %s" %(len(v_rp),len(v_rm))
             return v_rp, v_rm
         rp = random.choice(rp_option)
@@ -73,7 +78,7 @@ def migrate_Rate(size):
     参数：
     size，初始种群中候选解的个数，即每代population中有size个chrom，每个chrom中有num_var个SIV
     '''
-    lambdaa = range(size)                       # 每个解对应一对迁入lambdaa迁出率mu,共有size个解
+    lambdaa = range(size)             # 每个解对应一对迁入lambdaa迁出率mu,共有size个解
     mu = range(size)
     for i in range(size):
         lambdaa[i] = math.cos(float(size - (i + 1)) / size)     # 按照种群所有候选解排名后的顺序，依次求解余弦迁入率，rank值越小迁入率越小
@@ -133,6 +138,7 @@ def range2rect(size, num_var, type0):
     res = [[type0 for j in xrange(num_var)] for i in xrange(size)]
     return res
 
+(迁移代价为migration_time_cost)
 def make_population(size, num_var, c_rp, c_rm, v_rp, v_rm, time_base): #    作为全局变量，按照需要传入各方法中 f, p_mutate, time_base, lambdaa):
     '''
     构造一个population，包含size个候选解chrom,每个chrom是num_var个分别记录该容器所在的vm和hm编号的元组
@@ -360,6 +366,9 @@ def fix_effective(popu1, size, num_var):
                                 popu1['population'][i][c] = [location, min_h]
                                 popu1['h_p_cost'][i][min_h] += popu1['v_rp'][location]
                                 popu1['h_m_cost'][i][min_h] += popu1['v_rm'][location]
+                                # if location in vm_used_id and min_h != vm_used_id[location]:
+                                #     popu1['h_p_cost'][i][vm_used_id[location]] -= popu1['v_rp'][location]
+                                #     popu1['h_m_cost'][i][vm_used_id[location]] -= popu1['v_rm'][location]
                                 vm_used_id[location] = min_h     # 该次vm-hm放入vm_used_id中记录
                                 break
 
@@ -367,10 +376,12 @@ def fix_effective(popu1, size, num_var):
                     if popu1['v_p_cost'][i][index] <= popu1['v_rp'][index] and popu1['v_m_cost'][i][index] <= popu1['v_rm'][index]:
                         break
                     # 否则，继续while循环取次小的容器，并选择放置
+        v_back2 = copy.deepcopy(vm_used_id)
 
         # 对于超出hm约束的情况的fix
         for index in xrange(num_var):
             if popu1['h_p_cost'][i][index] > 1.0 or popu1['h_m_cost'][i][index] > 1.0:
+                print "修改hm过载 ", "h_id = {a}, h_p_cost = {b}, h_m_cost = {c}".format(a=index, b=popu1['h_p_cost'][i][index], c=popu1['h_m_cost'][i][index])
                 # print "过载的hm编号是： ",index
                 # 说明index号hm有问题，根据之前记录的字典vm_used_id放于该hm上vms的编号
                 vms = [v for v, h in vm_used_id.items() if h == index]
@@ -378,8 +389,14 @@ def fix_effective(popu1, size, num_var):
                 # 一定要找到符合资源约束的方案，否则持续循环
                 while True:
                     # 找到尺寸最小的vm，并迁出
+                    print "该物理机上的虚拟机对应cpu尺寸{cpu},mem尺寸{mem}".format(cpu=[popu1['v_rp'][v] for v in vms],mem=[popu1['v_rm'][v] for v in vms])
                     # print "该物理机上的虚拟机：",[popu1['v_rp'][v] for v in vms]
                     ids = [popu1['v_rp'][v] for v in vms]
+                    # try:
+                    #     v = vms[ids.index(min(ids))]
+                    # except ValueError:
+                    #     print "hm代价统计有异常", index, vm_used_id, v_back1, v_back2
+                    #     sys.exit(0)
                     v = vms[ids.index(min(ids))]
                     # print v
                     popu1['h_p_cost'][i][index] -= popu1['v_rp'][v]
@@ -638,4 +655,4 @@ if __name__ == '__main__':
     hsi_list： 0,1,2,3分别对应着 power、v_balance、h_balance、migration_time
     请按顺序传参
     '''
-    main(100, 10, 100, 1.0, ['power','v_balance'])
+    main(100, 10, 100, 1.0, ['power'])
