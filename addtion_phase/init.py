@@ -70,7 +70,7 @@ def deprecated_init_VM(c_rp, c_rm, rp_option, rm_option, num_var):
     v_rm = []
     i = 0
     while True:
-        if i == num_var:                        # 对num_var个docker选择随机的vm位置
+        if i == num_var:                        # 循环中止条件
             #print "len(v_rp)= %s,len(v_rm) = %s" %(len(v_rp),len(v_rm))
             return v_rp, v_rm
         rp = random.choice(rp_option)

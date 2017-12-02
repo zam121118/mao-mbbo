@@ -18,6 +18,11 @@ Goal: 这个mbbo算法是针对vm-hm架构的，单纯以VM为粒度的聚合算
          引入集群的负载方差，方差越大说明hms之间负载差异性越高（能够承载新VM可能性差异大），负载越不均衡。
       3. 因此在对比算法性能代价时，应该综合考虑集群load index average和方差，方差越大说明集群负载更不均衡，
          但是若方差差异不大，那么load index average越小的集群承载更多VM的可能性越大。
+说明： 在构造的表示集群状态数据结构中，v_rp,v_rm list代表num_var个不同编号下标的VM demands资源大小，
+      对于running VMs均有大于0.0的资源请求，仅down Vms资源均为0.0;
+      而population记录的是所有num_var的v-h或d-(v,h)映射，这并不说明所有的VM均都处于running态，
+      因此可以通过v_rp/rm均为0.0或者v_p/m_cost均为0.0来得知VM是否running,
+      这会直接影响到代价计算的均值分母。
 '''
 import time
 import random
@@ -323,7 +328,7 @@ def get_best_cost(popu1, popu2):
 
 def createVMResrcs(rp_u, rm_u, p, num_var):
     '''
-    目标：随机生成测试虚拟机集群中每个vm对cpu和mem的资源请求
+    目标：Gao Y提出的基于相关系数生成测试数据集的方式来生成VM
     参数：
     rp_u是对cpu请求的指导变量，rm_u是对mem资源请求的指导变量，虚拟机对cpu，mem的最终需求量会以正态分布的形式落在以指导变量为期望的邻域附近
     p代表虚拟机的cpu和mem两种资源之间的相关系数，负责控制每台虚拟机对两种资源需求的关联程度
