@@ -6,13 +6,8 @@
     <!-- 引入 ECharts 文件 -->
     <script type="text/javascript" src="./static/lib/echarts/3.8.4/echarts.min.js"></script>
     <script type="text/javascript" src="./static/lib/echarts/3.8.4/dark.js"></script>
-    <!--引入jQuery-->
+    <!--引入jQuery用于异步数据导入-->
     <script type="text/javascript" src="./static/lib/jquery/jquery-2.1.1.js"></script>
-    <script type="text/javascript" src="./static/lib/jqueryui/humanlity/jquery-ui.js"></script>
-    <script type="text/javascript" src="./static/lib/jquery/jquery-2.1.1.js"></script>
-    <script type="text/javascript" src="./static/lib/jqueryui/humanlity/jquery-ui.js"></script>
-    <script type="text/javascript" src="./static/lib/dat.gui/dat.gui.js"></script>
-    <script type="text/javascript" src="./static/lib/pixi.js/v4.4.4/pixi.min.js"></script>
     <link rel="stylesheet" href="./static/lib/jqueryui/humanlity/jquery-ui.css">
     <link rel="stylesheet" href="./static/lib/font-awesome/4.7.0/css/font-awesome.css">
 </head>
@@ -23,21 +18,15 @@
 
     // 基于准备好的dom,初始化echarts实例
     var myChart = echarts.init(document.getElementById('main'));
-
-    // 使用指定的配置项指定parallel aqi option的配置项和数据
-    // var dataFFDSum;
-    // var dataFFDProd;
-    // var dataDotProd;
-    // var dataL2;
     var schema = [
-        {name:'scale', index: 0, text:'增量规模'},
-        {name:'Power', index: 1, text:'能耗'},
+        {name:'scale', index: 0, text:'容器增量'},
+        {name:'Power', index: 1, text:'集群能耗'},
         {name:'v_balance', index: 2, text:'VM负载平方差'},
         {name:'v_average_balance', index: 3, text:'VM负载指数均值'},
         {name:'h_balance', index: 4, text:'HM负载平方差'},
         {name:'h_average_balance', index: 5, text:'HM负载指数均值'},
-        {name:'used_hms', index: 6, text:'运行HM规模'},
-        {name:'used_vms', index: 7, text:'运行VM规模'},
+        {name:'used_hms', index: 6, text:'Running HMs规模'},
+        {name:'used_vms', index: 7, text:'Running VMs规模'},
         {name:'used_time', index: 8, text:'计算耗时'}
     ];
     var lineStyle = {
@@ -67,7 +56,6 @@
             top: 50,
             right: 10,
             type: 'scroll',
-            //data: ['FFDSum', 'FFDProd', 'Dot-Prod', 'L2'],
             data:[{
                 name:'FFDSum',
                 icon:'circle',
@@ -100,6 +88,7 @@
                 fontSize: 14
             }
         },
+        // Echarts parallel axis 暂不支持tooltip
         tooltip: {
             trigger:'axis',
             triggerOn: 'click',
@@ -120,13 +109,7 @@
                     + schema[5].text + '：' + value[5] + '<br>'
                     + schema[6].text + '：' + value[6] + '<br>';
             }
-        },
-        // dataZoom: {
-        //     show: true,
-        //     orient: 'vertical',
-        //     parallelAxisIndex: [0]
-        // },
-        
+        },       
         parallelAxis: [
             // {dim: 0, name: schema[0].text, inverse: true, nameLocation: 'start'},
             {dim: 0, name: schema[0].text, inverse: true, max:30000, nameLocation: 'start'},
@@ -136,37 +119,38 @@
             {dim: 4, name: schema[4].text},
             {dim: 5, name: schema[5].text},
             {dim: 6, name: schema[6].text},
-            {dim: 7, name: schema[7].text}
+            {dim: 7, name: schema[7].text},
+            {dim: 8, name: schema[8].text, inverse: true, nameLocation:"end"}
         ],
 
         // 数据视觉化
-        visualMap: {
-            type: 'continuous',
-            show: true, //false,
-            // min: 0,
-            // max: 300000,
-            // pieces 自定义分段区间
-            pieces: [
-                {gt: 10000},            // (1500, Infinity]
-                {gt: 5000, lte: 10000},  // (900, 1500]
-                {gt: 500, lte: 5000},  // (310, 1000]
-                {gt: 200, lte: 500},   // (200, 300]
-                {gt: 100, lte: 200},       // (10, 200]
-                {lt: 100}                 // (-Infinity, 100)
-            ],
-            //splitNumber: 5,
-            dimension: 0,
-            hoverLink: true,
-            color: ['#d94e5d','#eac736','#50a3ba'],
-            // selectedMode: 'multiple',
-            textStyle: {
-                color: '#fff'
-            }
-        },
+        // visualMap: {
+        //     type: 'continuous',
+        //     show: true, //false,
+        //     // min: 0,
+        //     // max: 300000,
+        //     // pieces 自定义分段区间
+        //     pieces: [
+        //         {gt: 10000},            // (1500, Infinity]
+        //         {gt: 5000, lte: 10000},  // (900, 1500]
+        //         {gt: 500, lte: 5000},  // (310, 1000]
+        //         {gt: 200, lte: 500},   // (200, 300]
+        //         {gt: 100, lte: 200},       // (10, 200]
+        //         {lt: 100}                 // (-Infinity, 100)
+        //     ],
+        //     //splitNumber: 5,
+        //     dimension: 0,
+        //     hoverLink: true,
+        //     color: ['#d94e5d','#eac736','#50a3ba'],
+        //     // selectedMode: 'multiple',
+        //     textStyle: {
+        //         color: '#fff'
+        //     }
+        // },
         parallel: {
             top: '20%',
             left: '8%',
-            right: '13%',
+            right: '10%',
             bottom: 100,
             axisExpandable: true,
             axisExpandCenter: 15,
@@ -176,8 +160,8 @@
             parallelAxisDefault: {
                 type: 'value',
                 name: 'Power',
-                nameLocation: 'start', //'end',
-                nameRotate: 25, // 
+                nameLocation: 'start',
+                nameRotate: 25,
                 nameGap: 20,
                 nameTextStyle: {
                     color: '#fff',
@@ -200,7 +184,8 @@
                     textStyle: {
                         color: ['#fff']
                     }
-                }
+                },
+                triggerEvent: true
             }
         },
         series: [
@@ -233,6 +218,10 @@
 
     // 显示标题、图例和坐标轴
     myChart.setOption(option);
+
+    myChart.on('click', function(param) {
+        console.log(param);
+    });
 
 
     // 异步加载数据get_data()
@@ -276,14 +265,14 @@
     // },'json');
 
     // 异步加载数据
-    $.get('./addtion-demo1.json').done(function (data) {
+    $.get('./addtion-demo.json').done(function (data) {
         // 填入数据
         console.log("进入数据加载方法");
         dataFFDSum = data.FFDSum;
         dataFFDProd = data.FFDProd;
         dataDotProd = data.Dot_Prod;
         dataL2 = data.L2;
-        console.log(data);
+        //console.log(data);
         
         // 使用刚指定的配置项和数据显示图表
         myChart.setOption({
@@ -335,6 +324,10 @@
 
 
 
+    // 目前平行坐标使用百度的echarts完成，若要进一步完善tooltip功能或者鱼眼功能，可以使用d3的库，不过代码稍微偏低层，可参考
+    //1. https://bl.ocks.org/jasondavies/1341281
+    //2. http://www.washingtonpost.com/wp-srv/special/politics/state-vs-federal-exchanges/
+    //3. https://bl.ocks.org/jasondavies/raw/1341281/
     // 平行坐标数据序列为addtion_scale、power_cost、v_balance_cost、v_average_load_index
     // h_balance_cost、h_average_load_index、used_hms、used_vms、used_time
     </script>
