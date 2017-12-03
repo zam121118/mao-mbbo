@@ -5,6 +5,29 @@ Date : 2017-11-13
 @Author : Amy
 Goal: 用于生成新增时d-v-h架构初始状态，并尽量保留mbbo数据类型方便说明聚合时mbbo优于BFD算法;
       生成新增容器序列，引入replicas考虑，对于同服务多副本必须使用互斥调度原则，不可同VM
+Change: 2017-12-2
+      初始化集群数据类型，各个字典元素项dockers,VMs,HMs等均按照集群设置的docker数量num_var进行生成的，实际上在方法initialize_population中
+      仅保证所有num_var个docker均有符合所有约束规则的(v,h)映射，
+      但实际上集群中num_var个v_rp/rm、h_rp/rm中仅有一部分被映射，意味着没有被映射到的即为实际没有running的VMs/HMs，
+      所以他们对应的v_p/m_cost、h_p/m_cost均为0.0。
+      而集群中的字典元素项map_v_h实时记录着不同阶段集群实际参与running的VMs/HMs编号。
+
+    因此，现进行如下说明：
+    1. 本d-v-h集群，在创建时为了后期便于拓展使用尤其是满足新增阶段的拓展，依据当前集群容器数量规模设置了拥有num_var个HMs的集群，
+    并且为了创建能够容纳各种尺寸容器的VM而采用针对各个容器一对一随机生成大小的VMs，初始规模设置为num_var；
+    2. 但在初始集群环境中，必然仅有一部分HMs、VMs 处于running，其对应的v/h_p/m_cost会依据容纳的dockers而计算，
+    集群中population保存着每个容器实际hosted （VM,HM）映射，map_v_h保存着实际running VM与running HM的映射；
+    3. 由于集群中总会有一部分VMs/HMs并没被映射，可认为处于关机down状态，那么其存在也不应参与到集群实际的能耗计算、
+    VM层面的负载指数均值及负载方差计算、HM层面的负载指数均值及方差计算；
+    4. 在集群处于接纳容器新增需求的阶段时，使用的放置策略在进行资源约束检测以及对Objects(vm/hm)打分时，不应仅针对running VMs/HMs打分，
+    考虑到新增时集群不能保证时时刻刻均有足够VMs或者HMs容纳下新增dockers，所以集群有编号的VMs/HMs均应被打分，
+    当然不同的算法侧重点不同，打分偏向于选择running VMs/HMs还是启用新VMs/HMs也会不同；
+    5. （还未做）因为考虑到docker微服务编排调度器必须具有的容错能力，再对所有容器及其replicas安排好place后，
+    必须实行independence检测，同一服务的多个replicas不可位于同一Node(此处应为VM),所以采用BFD微调策略在该主机多VM间进行选择性
+    换出与纳新。
+
+
+
 '''
 
 
@@ -235,7 +258,6 @@ def main_init(num_var, p, addtion_nums):
     # deprecated_rp_option = [1.0]                      # vm可选的cpu尺寸
     # deprecated_rm_option = [1.0]
     vm_option = [(0.3, 0.3), (0.5, 0.4), (0.6, 0.5), (0.8, 0.7), (1.0, 0.8), (1.0, 1.0)]                      # vm可选的mem尺寸
-
     size = 1                               # 新增阶段只需单解
 
     # 2.初始化num_var个容器和vm，以及计算迁移率
