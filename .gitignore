@@ -91,4 +91,8 @@ ENV/
 out.txt
 .DS_Store
 
+<<<<<<< HEAD
 .vscode/
+=======
+.vscode/
+>>>>>>> cm
