@@ -27,6 +27,7 @@ vm_option = [(1.0, 1.0), (1.0, 0.8), (0.8, 0.7), (0.6, 0.5), (0.5, 0.4), (0.3, 0
 
 def FFDSum_complex(bins, objects):
     '''
+    面向降能耗，以docker作为实际负载考虑的新增放置策略
     @param: bins 代表当前系统状态
             objects 代表待放入bin的容器
     @return: 安排好所有objects的集群bins状态
@@ -34,13 +35,7 @@ def FFDSum_complex(bins, objects):
     '''
 
     print " \n进入 FFDSum_complex() 方法" 
-
-
     time0 = time.time()
-
-    # d-v-h架构下新增阶段希望做到一定节能，即尽可能使用active VM（即v_p_cost不是0.0），尽量不去开启新的HM
-    # 情况1： 新增容器以VM作为直接node考虑，以docker真实负载计算与各个HM权重和与其上各个VM权重之和，分最高者放入
-    # 情况2： all running vms均无法放入，init_VM产生新VM，再对所有HM打分，分最高者放入
 
     for x in xrange(len(objects['c_rp'])):
         object_CPU, object_MEM, i = objects['c_rp'][x], objects['c_rm'][x], objects['replicas'][x]
@@ -76,7 +71,7 @@ def FFDSum_complex(bins, objects):
                 i -= 1 
                 continue
                 
-            # 否则，当前集群没有能容纳该object（容器）的bin（VM）
+            # 否则，集群已没有能容纳该object（容器）的bin（VM）
             else:
                 flag = find_HM_complex(bins, object_CPU, object_MEM, vm_option)
                 
@@ -193,7 +188,7 @@ def FFDSum_simple(bins, objects):
             else:
                 # 随机生成一个足以容纳该容器的VM, 获取编号
                 # vm = create_VM(object_CPU, object_MEM, rp_option, rm_option)
-                vm = create_VM(object_CPU, object_MEM, vm_option)
+                vm = create_VM_random(object_CPU, object_MEM, vm_option)
                 vm_suffix = len(bins['v_p_cost'][0])
 
                 # 为该VM找寻HM,并更新HM资源变动及map_v_h
@@ -222,10 +217,6 @@ def FFDSum_simple(bins, objects):
     print "Simple used time is {} \n used the number of HMs is {}".format(time1-time0, len(num))
     return bins
 
-
-
-
-
 def weightVMBins_simple(bins, object_CPU, object_MEM):
     '''
     计算集群bins(VMs)中所有bin的权重，并返回weightedVMBins记录有各个node(VM)得分的weightedVMBins
@@ -250,8 +241,8 @@ def weightVMBins_simple(bins, object_CPU, object_MEM):
 
 def weightVMBins_complex(bins, object_CPU, object_MEM):
     '''
-    计算集群bins中所有bin的权重，并返回weightedVMBins记录有各个node(VM)得分的weightedVMBins
-    注：score引入对各VM所在HM的打分，具体为该VM所在HM上所有VMs：
+    以最大化使用VM资源为目标，以docker作为实际负载考虑，引入基于打分机制的FFDSum算法，
+    对各个VM计算放入object引起的资源占比与hosted HM引起的资源占比之和。
     CPU得分sum(reservedCPU/v_rp*100)
     MEM得分sum(reservedMEM/v_rm*100)
     '''
@@ -259,13 +250,9 @@ def weightVMBins_complex(bins, object_CPU, object_MEM):
 
     # 转换map_v_h为map_h_v
     map_h_v = map_h2v(bins)
-    # map_h_v = collections.defaultdict(list)
-    # for key,value in bins['map_v_h'].items():
-    #     map_h_v[value].append(key)
-
     weightedVMBins = {}
     # 以active hm:vm的映射开始，其中vm为list
-    for h, v in map_h_v:
+    for h, v in map_h_v.items():
         # 拿到每个HM实际运行的所有docker产生的负载
         true_hm_cpu = sum([bins['v_p_cost'][0][i] for i in v])
         true_hm_mem = sum([bins['v_m_cost'][0][i] for i in v])
@@ -290,11 +277,12 @@ def weightVMBins_complex(bins, object_CPU, object_MEM):
                 weightedVMBins.setdefault(j, cpuScore+memScore+hmScore)
     return weightedVMBins
 
-
-
-def find_HM_complex(bins, v_rp, v_rm, vm_option):
+def find_HM_complex(bins, c_rp, c_rm, vm_option):
     '''
-    在集群当前active HMs中，以能够找到可放入HM且能容纳该容器为前提，按照容器实际对HM负载降序排列
+    在集群当前active HMs中，
+    1. 能够容纳该容器(c_rp, c_rm)的最小VM；
+    2. 能够容纳该最小VM的所有active HMs，依据实际容器当作负载时资源占比进行打分；
+    3. 分高者即满足约束且最为合适的方案，若无则需新引入HM。
     '''
     print '\n进入 find_HM_complex() 方法'
 
@@ -303,7 +291,7 @@ def find_HM_complex(bins, v_rp, v_rm, vm_option):
     weightedHMBins = {}
     # 能够容纳容器(v_rp, v_rm)的最小VM
     for c, m in vm_option[::-1]:
-        if v_rp <= c and v_rm <= m:
+        if c_rp <= c and c_rm <= m:
             min_vm = [c,m]
 
     # 挑选能够容纳最小VM的所有active HMs
@@ -327,34 +315,6 @@ def find_HM_complex(bins, v_rp, v_rm, vm_option):
         return (hm_suffix, min_vm)
     else:
         return False
-
-
-
-
-
-def weightHMBins_complex(bins, object_CPU, object_MEM):
-    '''
-    计算集群bins(HMs)中所有bin的权重，并返回weightedHMBins记录有各个node(HM)得分的weightedHMBins
-    '''
-    print "\n 进入weightHMBins_FFDSum() 方法"
-
-
-    weightedHMBins = {}
-    for j in xrange(len(bins['h_p_cost'][0])):
-        bin_reservedCPU = 1.0 - bins['h_p_cost'][0][j]
-        bin_reservedMEM = 1.0 - bins['h_m_cost'][0][j]
-        if bin_reservedCPU < object_CPU or bin_reservedMEM < object_MEM:
-            continue
-        cpuScore = 100
-        memScore = 100
-        if object_CPU > 0:
-            cpuScore = (bins['h_p_cost'][0][j] + object_CPU) * 100 / 1.0
-        if object_MEM > 0:
-            memScore = (bins['h_m_cost'][0][j] + object_MEM) * 100 / 1.0
-        if cpuScore <= 100 and memScore <= 100:
-            weightedHMBins.setdefault(j, cpuScore+memScore)
-    return weightedHMBins
-
 
 def find_HM_simple(bins, v_rp, v_rm, vm_suffix):
     '''
@@ -384,52 +344,47 @@ def find_HM_simple(bins, v_rp, v_rm, vm_suffix):
     bins['map_v_h'][vm_suffix] = hm_suffix
     return hm_suffix
 
-# def create_VM(c_rp, c_rm, rp_option, rm_option):
-
-#     '''
-#     依据实验可选的VM尺寸(rp_option、rm_option)随机生成可以容纳(c_rp、c_rm)的VM
-#     '''
-#     print "\n 进入 create_VM() 方法"
-
-#     vm = {'rp':0, 'rm':0}
-#     while vm['rp'] == 0:
-#         rp = random.choice(rp_option)
-#         rm = random.choice(rm_option)
-#         if rp >= c_rp and rm >= c_rm:
-#             vm['rp'],vm['rm'] = rp,rm
-#     return vm
-def create_VM(c_rp, reservedCPU, c_rm, reservedMEM, vm_option):
-
+def create_VM_abs_random(c_rp, c_rm, rp_option, rm_option):
     '''
-    # 依据实验可选的VM尺寸(rp_option、rm_option)随机生成可以容纳(c_rp、c_rm)
-    且不超过HM剩余资源（reservedCPU, reservedMEM）的最大VM。
-    其中vm_option以资源降序排列
-    为了放置完全随机的产生虚拟机尺寸，可以人为干预的设置几种虚拟机尺寸(cpu, mem)
-    [0.3, 0.3], [0.5, 0.4] [0.6, 0.5] [0.8, 0.7] [1.0, 0.8] [1.0, 1.0]
+    依据实验可选的VM尺寸(rp_option、rm_option)随机生成可以容纳(c_rp、c_rm)的VM
     '''
     print "\n 进入 create_VM() 方法"
 
-    # 完全随机的创建vm尺寸
-    # vm = {'rp':0, 'rm':0}
-    # while vm['rp'] == 0:
-    #     rp = random.choice(rp_option)
-    #     rm = random.choice(rm_option)
-    #     if rp >= c_rp and rm >= c_rm:
-    #         vm['rp'],vm['rm'] = rp,rm
+    vm = {'rp':0, 'rm':0}
+    while vm['rp'] == 0:
+        rp = random.choice(rp_option)
+        rm = random.choice(rm_option)
+        if rp >= c_rp and rm >= c_rm:
+            vm['rp'],vm['rm'] = rp,rm
+    return vm
+
+def create_VM_random(c_rp, c_rm, vm_option):
+    '''
+    从vm_option中随机挑选满足约束的VM
+    '''
+    print "\n 进入 create_VM() 方法"
     # 部分随机的创建任意大小能够容纳该容器的vm
-    # vm = {'rp':0, 'rm':0}
-    # for i in xrange(len(vm_option)):
-    #     if vm_option[i][0] >= c_rp and vm_option[i][1] >= c_rm:
-    #         vm['rp'], vm['rm'] = vm_option[i][0], vm_option[i][1]
-    #         break
+    vm = {'rp':0, 'rm':0}
+    for i in xrange(len(vm_option)):
+        if vm_option[i][0] >= c_rp and vm_option[i][1] >= c_rm:
+            vm['rp'], vm['rm'] = vm_option[i][0], vm_option[i][1]
+            break
+    return vm
+
+def create_VM(c_rp, reservedCPU, c_rm, reservedMEM, vm_option):
+    '''
+    从按照资源降序排列的vm_option中挑选满足约束条件的VM
+    约束1： 该VM能够容纳容器（c_rp, c_rm）
+    约束2： 不超过HM剩余资源（reservedCPU, reservedMEM）的最大VM。
+    '''
+    print "\n 进入 create_VM() 方法"
+
     # 部分随机可容纳该容器且不会超过物理机剩余资源,vm_option中VM大小降序排列
     vm = {'rp':0, 'rm':0}
     for c, m in vm_option:
         if c <= reservedCPU and m <= reservedMEM and c >= c_rp and m >= c_rm:
             vm['rp'], vm['rm'] = c, m
     return vm
-
-
 
 def map_v2h(bins, size=0):
     '''
@@ -450,18 +405,99 @@ def map_h2v(bins):
 
 def compute_costs(bins, size=1):
     '''
+    注意： 以HM上所有容器作为真实负载考虑
     计算bins中前size个方案对应的能耗、负载均衡方差代价值，由于新增阶段不涉及VM内存迁移，所以不考虑迁移时间
     power_cost、v_balance_cost、h_balance_cost
-    以集群环境中所有running VMs/HMs作为计算对象（）
+    以集群环境中所有active running VMs/HMs作为计算对象
     '''
     print "进入能耗、负载方差计算"
     # First, 构造代价变量，计算实际running VMs HMs
     cost = {
         'power_cost': 0.0,
         'v_balance_cost': 0.0,
+        'v_average_load_index': 0.0,
         'h_balance_cost': 0.0,
+        'h_average_load_index': 0.0,
         'used_vms': 0,
-        'used_hms': 0
+        'used_hms': 0,
+        'used_time': 0.0
+        }
+
+    map_h_v = map_h2v(bins)
+    map_v_p = map_v2h(bins)
+    used_vms = map_v_p.keys()
+    used_hms = list(set(map_v_p.values()))
+    
+
+    # Then, 对bins中前size个方案计算代价值（在新增算法中，size只有0一种值）
+    for i in xrange(size):
+        h_load_index = []      # 各HM的负载均衡指数
+        v_load_index = []      # 各VM的负载均衡指数
+
+        # 计算总能耗及各running VM/HM负载均衡指数
+        tmp0, tmp1 = len(used_vms), len(used_hms)
+        cost['used_vms'] = tmp0
+        cost['used_hms'] = tmp1
+        while tmp0 > 0 or tmp1 > 0:
+            if tmp0 > 0:
+                v = used_vms[tmp0 - 1]
+                # 用VM配置尺寸与容器实际占用进行计算
+                index = 1.0 / (bins['v_rp'][v] - bins['v_p_cost'][i][v] + 0.0005) / (bins['v_rm'][v] - bins['v_m_cost'][i][v] + 0.0005)
+                v_load_index.append(index)
+                tmp0 -= 1
+            if tmp1 > 0:
+                h = used_hms[tmp1 - 1]   
+                # 以docker作为实际负载进行代价计算
+                true_load_cpu = sum([bins['v_p_cost'][i][v] for v in map_h_v[h]])
+                true_load_mem = sum([bins['v_m_cost'][i][v] for v in map_h_v[h]])
+                cost['power_cost'] += 446.7 + 5.28*true_load_cpu - 0.04747*true_load_cpu**2 + 0.000334*true_load_cpu**3
+                index = 1.0 / (1.0005 - true_load_cpu) / (1.0005 - true_load_mem)
+                h_load_index.append(index)
+                tmp1 -= 1
+
+        
+        # 计算所有running VMs/HMs间的负载方差
+        tmp0, tmp1 = len(used_vms), len(used_hms)
+        v_average_load_index = sum(v_load_index) / tmp0
+        h_average_load_index = sum(h_load_index) / tmp1
+        cost['v_average_load_index'] = v_average_load_index
+        cost['h_average_load_index'] = h_average_load_index
+        while tmp0 > 0 or tmp1 > 0:
+            if tmp0 > 0:
+                cost['v_balance_cost'] += (v_load_index[tmp0 - 1] - v_average_load_index)**2
+                tmp0 -= 1
+            if tmp1 > 0:
+                cost['h_balance_cost'] += (h_load_index[tmp1 - 1] - h_average_load_index)**2
+                tmp1 -= 1
+
+        # 计算负载平均差（方差算数平方跟）
+        cost['v_balance_cost'] = math.sqrt(cost['v_balance_cost'] / len(used_vms))
+        cost['h_balance_cost'] = math.sqrt(cost['h_balance_cost'] / len(used_hms))
+
+
+        # 计算VM迁移时间（仅聚合阶段）
+        pass
+
+    # print 'true cost={}'.format(cost)
+    return cost
+
+def faked_cost(bins, size=1):
+    '''
+    注意： 这里负载以VM配置作为负载考虑
+    计算bins中前size个方案对应的能耗、负载均衡方差代价值
+    以集群环境中所有running VMs/HMs作为计算对象
+    '''
+    print "进入能耗、负载方差计算"
+    # First, 构造代价变量，计算实际running VMs HMs
+    cost = {
+        'power_cost': 0.0,
+        'v_balance_cost': 0.0,
+        'v_average_load_index': 0.0,
+        'h_balance_cost': 0.0,
+        'h_average_load_index': 0.0,
+        'used_vms': 0,
+        'used_hms': 0,
+        'used_time': 0.0
         }
     map_v_p = map_v2h(bins)
     used_vms = map_v_p.keys()
@@ -497,6 +533,8 @@ def compute_costs(bins, size=1):
         tmp0, tmp1 = len(used_vms), len(used_hms)
         v_average_load_index = sum(v_load_index) / tmp0
         h_average_load_index = sum(h_load_index) / tmp1
+        cost['v_average_load_index'] = v_average_load_index
+        cost['h_average_load_index'] = h_average_load_index
         while tmp0 > 0 or tmp1 > 0:
             if tmp0 > 0:
                 cost['v_balance_cost'] += (v_load_index[tmp0 - 1] - v_average_load_index)**2
@@ -513,9 +551,8 @@ def compute_costs(bins, size=1):
         # 计算VM迁移时间（仅聚合阶段）
         pass
 
-    print 'cost={}'.format(cost)
+    # print 'origin cost={}'.format(cost)
     return cost
-
 
 
 if __name__ == '__main__':
@@ -611,9 +648,9 @@ if __name__ == '__main__':
     s2 = '\n\n\nEnd:   \nBins_complex = {} \nThe cost_comlex of new state = {}'.format(init_popu0, cost_complex)    
     print s0,'\n' ,s1,'\n',s2
 
-    # with open('addtion_phase//tmp.py','a') as f:
-    #     f.flush()
-    #     f.write(s0)
-    #     f.write(s1)
-    #     f.write(s2)
+    with open('addtion_phase//tmp.py','a') as f:
+        f.flush()
+        f.write(s0)
+        f.write(s1)
+        f.write(s2)
 
