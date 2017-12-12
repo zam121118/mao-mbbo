@@ -5,6 +5,11 @@ Date : 2017-11-22
 @Author : Amy
 Goal : useful modules
 Digest : 本模块定义了能够描述FFDSum以及Dot-Prod算法的有效模块，可以灵活的在第三方文件中引用
+更新： 2017-12-12
+      注意： 所有的代价计算仅以集群中active HMs为准，即v_p/m_cost、h_p/m_cost均不为0.0或直接使用map_v_h计算
+      修改代价计算模块，能耗计算以实际docker为负载计算；
+      负载均衡在VM层仅计算纵向，无法衡量横向
+      HM层负载均衡需要纵向与横向
 '''
 
 import time
