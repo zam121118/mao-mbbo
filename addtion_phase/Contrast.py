@@ -310,10 +310,11 @@ def find_HM_complex(bins, c_rp, c_rm, vm_option):
         if hmScore <= 200:
             weightedHMBins.setdefault(h, hmScore)
         
-        # 将最小VM换为最大VM，该HM可容纳的最大VM
-        for c, m in vm_option:
-            if reservedCPU <= c and reservedMEM <= m:
-                min_vm = [c,m]
+        # # 将最小VM换为最大VM，该HM可容纳的最大VM
+        # for c, m in vm_option:
+        #     if reservedCPU <= c and reservedMEM <= m:
+        #         min_vm = [c,m]
+        #         break
 
     # 分最高者hm作为容纳新VM的主机，若无满足hm则在主程序中统一起用新HM，创建新VM（控制VM创建规模暂不考虑）
     if len(weightedHMBins) > 0:
@@ -371,11 +372,12 @@ def create_VM_random(c_rp, c_rm, vm_option):
     print "\n 进入 create_VM() 方法"
     # 部分随机的创建任意大小能够容纳该容器的vm
     vm = {'rp':0, 'rm':0}
-    # 这种方法总是选择最大者放入
+    # 这种方法总是选择最大者放入,故基本都是(1.0, 1.0)的VM
     # for i in xrange(len(vm_option)):
     #     if vm_option[i][0] >= c_rp and vm_option[i][1] >= c_rm:
     #         vm['rp'], vm['rm'] = vm_option[i][0], vm_option[i][1]
     #         break
+    # 采用随机生成方式，模拟创建的VM
     while vm['rp'] == 0:
         i = random.randint(0, len(vm_option)-1)
         if vm_option[i][0] >= c_rp and vm_option[i][0] >= c_rm:
@@ -396,6 +398,7 @@ def create_VM(c_rp, c_rm, vm_option):
     for c, m in vm_option:
         if c <= 1.0 and m <= 1.0 and c >= c_rp and m >= c_rm:
             vm['rp'], vm['rm'] = c, m
+            break
     return vm
 
 def map_v2h(bins, size=0):
@@ -422,9 +425,6 @@ def utilization_ratio_cost(bins, size=1):
     '''   
     print "进入能耗、负载方差计算,集群剩余资源利用率"
 
-    true_h_p = [0] * 1000
-    true_h_m = [0] * 1000
-
     # First, 构造代价变量，计算实际running VMs HMs
     cost = {
         'reserved_utilization': 0.0,
@@ -435,10 +435,7 @@ def utilization_ratio_cost(bins, size=1):
         'h_average_load_index': 0.0,
         'used_vms': 0,
         'used_hms': 0,
-        'used_time': 0.0,
-        'true_h_p': true_h_p,
-        'true_h_m': true_h_m
-
+        'used_time': 0.0
         }
 
     map_h_v = map_h2v(bins)
@@ -469,8 +466,6 @@ def utilization_ratio_cost(bins, size=1):
                 # 以docker作为实际负载进行代价计算
                 true_load_cpu = sum([bins['v_p_cost'][i][v] for v in map_h_v[h]])
                 true_load_mem = sum([bins['v_m_cost'][i][v] for v in map_h_v[h]])
-                true_h_p[h] = true_load_cpu
-                true_h_m[h] = true_load_mem
                 # 计算集群剩余资源量即各HM节点cpu、mem余量之乘积，所有active HM求和
                 reserved_utilization += (1.0 - true_load_cpu) * (1.0 - true_load_mem)
                 cost['power_cost'] += 446.7 + 5.28*true_load_cpu - 0.04747*true_load_cpu**2 + 0.000334*true_load_cpu**3
