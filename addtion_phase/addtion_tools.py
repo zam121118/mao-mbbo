@@ -101,7 +101,6 @@ def Dot_product(bins, objects):
     print "Dot-Prod used time is {} \n used the number of HMs is {}".format(used_time, len(num))
     return (bins, used_time)
 
-
 def FFDSum(bins, objects):
     '''
     @param: bins 代表当前系统状态
@@ -347,9 +346,6 @@ def func_L2(bins, objects):
     print "Dot-Prod used time is {} \n used the number of HMs is {}".format(used_time, len(num))
     return (bins, used_time)
 
-
-
-
 def find_HM(bins, v_rp, v_rm, vm_suffix, handle):
     '''
     为VM找寻可容纳其的HM标号(系统已有/新增)，并更新所引起的hm资源编号，及map_v_h
@@ -372,7 +368,6 @@ def find_HM(bins, v_rp, v_rm, vm_suffix, handle):
     # 更新放入VM造成的新HM资源变化及map_v_h
     bins['map_v_h'][vm_suffix] = hm_suffix
     return hm_suffix
-
 
 def deprecated_create_VM(c_rp, c_rm, rp_option, rm_option):
 
@@ -505,7 +500,6 @@ def weightVMBins_DotProd(bins, object_CPU, object_MEM):
         #     weightedVMBins.setdefault(j, dotScore)
     return weightedVMBins
 
-
 def weightHMBins_DotProd(bins, object_CPU, object_MEM):
     '''
     计算集群bins(HMs)中所有bin reserved vector(非capacity vector)与object(VM) vector数量积，
@@ -562,7 +556,6 @@ def weightVMBins_FFDProd (bins, object_CPU, object_MEM):
                 weightedVMBins.setdefault(j, prodScore)
     return weightedVMBins
 
-
 def weightHMBins_FFDProd(bins, object_CPU, object_MEM):
     '''
     计算集群bins(HMs)中所有bin的权重，并返回weightedHMBins记录有各个node(HM)得分的weightedHMBins
@@ -580,7 +573,6 @@ def weightHMBins_FFDProd(bins, object_CPU, object_MEM):
         if prodScore <= 1.00:
             weightedHMBins.setdefault(j, prodScore)
     return weightedHMBins
-
 
 def weightVMBins_L2(bins, object_CPU, object_MEM):
     '''
@@ -602,7 +594,6 @@ def weightVMBins_L2(bins, object_CPU, object_MEM):
             weightedVMBins.setdefault(j, distanceScore)
     return weightedVMBins
 
-
 def weightHMBins_L2(bins, object_CPU, object_MEM):
     '''
     计算集群bins(HMs)中所有bin的权重，并返回weightedHMBins记录有各个node(HM)得分的weightedHMBins
@@ -623,7 +614,6 @@ def weightHMBins_L2(bins, object_CPU, object_MEM):
         if distanceScore <= 2.00:
             weightedHMBins.setdefault(j, distanceScore)
     return weightedHMBins
-
 
 def compute_costs(bins, size=1):
     '''
@@ -776,7 +766,6 @@ def faked_cost(bins, size=1):
     # print 'origin cost={}'.format(cost)
     return cost
 
-
 def compositive_func(bins, objects, s0, handle0, handle1):
     '''
     @param: bins 代表当前系统状态
@@ -860,7 +849,6 @@ def compositive_func(bins, objects, s0, handle0, handle1):
     print "{} used time is {} \n used the number of HMs is {}".format(s0, used_time, len(num))
     return (bins, used_time)
 
-
 def createJSON(data, cost, key, addtion_scale):
     '''
     goal: 构造符合Echarts平行坐标图的json数据,并覆盖写入file_name文件
@@ -890,8 +878,6 @@ def createJSON(data, cost, key, addtion_scale):
         print "当填入{}时，JSON文件无此key值".format(key)
         sys.exit()      
     return data
-
-
 
 if __name__ == '__main__':
 
