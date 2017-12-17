@@ -296,7 +296,7 @@ def main_init(num_var, p, addtion_nums):
 
 
 if __name__=='__main__':
-    init_popu, addtion0 = main_init(50, 1.0, 100)
+    init_popu, addtion0 = main_init(50, 1.0, 600)
     # print init_popu,'\n',addtion0
     with open('addtion_phase//test.py', 'a') as f:
         f.flush()

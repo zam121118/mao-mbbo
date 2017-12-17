@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>Contrast of docker scheduler strategies</title>
+        <!-- 引入 ECharts 文件 -->
+    <script type="text/javascript" src="./static/lib/echarts/3.8.4/echarts.min.js"></script>
+    <script type="text/javascript" src="./static/lib/echarts/3.8.4/dark.js"></script>
+    <!--引入jQuery用于异步数据导入-->
+    <script type="text/javascript" src="./static/lib/jquery/jquery-2.1.1.js"></script>
+    <link rel="stylesheet" href="./static/lib/jqueryui/humanlity/jquery-ui.css">
+    <link rel="stylesheet" href="./static/lib/font-awesome/4.7.0/css/font-awesome.css">
+</head>
+<body>
+    <!--初始化一个DOM-->
+    <div id="main" style="width:1550px; height: 755px;"></div>
+    <script type="text/javascript">
+
+    // 基于准备好的dom,初始化echarts实例
+    var myChart = echarts.init(document.getElementById('main'));
+    
+    option = {
+        title: {
+            text: 'Docker+VM & Docker+VM+HM - based Addtion phase of Containers ',
+            subtext: 'data from experimental test',
+            sublink: 'https://github.com/zam121118/mao-mbbo/tree/addtion',
+            left: 'center',
+            top: 5,
+            itemGap: 0,
+            textStyle: {
+                color: '#0099CC'
+            },
+        },
+        tooltip: {
+            trigger: 'axis'
+        },
+        legend: {
+            //bottom: 30,
+            top: 50,
+            right: 10,
+            type: 'scroll',
+            data:[{
+                name:'2层Binpack',
+                icon:'circle',
+                textStyle:{
+                    color:'#CC0033'
+                }
+            },{
+                name:'3层Binpack',
+                icon:'circle',
+                textStyle:{
+                    color:'#009966'
+                }
+            },{
+                name:'容错2层Binpack',
+                icon:'circle',
+                textStyle:{
+                    color:'#6666FF'
+                }
+            },{
+                name:'容错3层Binpack',
+                icon:'circle',
+                textStyle:{
+                    color:'#336699'
+                }
+            }],
+            itemGap: 20,
+            textStyle: {
+                color: '#fff',
+                fontStyle: 'italic',
+                fontSize: 20
+            }
+        },
+        grid: {
+            left: '3%',
+            right: '4%',
+            bottom: '3%',
+            containLabel: true
+        },
+        toolbox: {
+            feature: {
+                saveAsImage: {}
+            }
+        },
+        // 数据视觉化会和legend颜色冲突
+        // visualMap: {
+        //     type: 'continuous',
+        //     show: true, //false,
+        //     // min: 0,
+        //     // max: 300000,
+        //     // pieces 自定义分段区间
+        //     pieces: [
+        //         {gt: 10000},            // (1500, Infinity]
+        //         {gt: 5000, lte: 10000},  // (900, 1500]
+        //         {gt: 500, lte: 5000},  // (310, 1000]
+        //         {gt: 200, lte: 500},   // (200, 300]
+        //         {gt: 100, lte: 200},       // (10, 200]
+        //         {lt: 100}                 // (-Infinity, 100)
+        //     ],
+        //     //splitNumber: 5,
+        //     dimension: 2,
+        //     hoverLink: true,
+        //     color: ['#d94e5d','#eac736','#50a3ba'],
+        //     // selectedMode: 'multiple',
+        //     textStyle: {
+        //         color: '#fff'
+        //     }
+        // },
+        xAxis: {
+            type: 'category',
+            boundaryGap: true,//false
+            data: []
+        },
+        yAxis: {
+            type: 'value'
+        },
+        // 设置dataRoom
+        dataRoom:[
+
+        ],
+        series: [
+            {
+                name:'2层Binpack',
+                type:'line',
+                lineStyle:{
+                    normal:{
+                        width: 3,
+                        type: 'solid'//dotted、dashed
+                        //shadowColor: 'rgba(0, 0, 0, 0.5)',
+                        //shadowBlur: 10,
+                        //opacity: 1
+                    }
+                },
+                stack: '',
+                data:[]
+            },
+            {
+                name:'3层Binpack',
+                type:'line',
+                stack: '',
+                data:[]
+            },
+            {
+                name:'容错2层Binpack',
+                type:'line',
+                stack: '',
+                data:[]
+            },
+            {
+                name:'容错3层Binpack',
+                type:'line',
+                stack: '',
+                data:[]
+            }
+        ]
+    };
+    
+    // 先设置完其它的样式，显示一个空的直角坐标轴，然后获取数据后填入数据
+    // 显示标题、图例和坐标轴
+    myChart.setOption(option);
+
+    // myChart.on('click', function(param) {
+    //     console.log(param);
+    // });
+
+    // 异步加载数据
+    $.get('./contrast-addtion-demo.json').done(function (data) {
+        // 填入数据
+        console.log("进入数据加载方法");
+        datascale = data.scale;
+        data2simple = data.simple;
+        data3complex = data.complex;
+        data_safe2simple = data.safe_simple;
+        data_safe3complex = data.safe_complex;
+        console.log(data);
+        
+        // 使用刚指定的配置项和数据显示图表
+        myChart.setOption({
+            xAxis: {
+            type: 'category',
+            boundaryGap: true,//false
+            data: datascale
+            },
+            series: [{
+                    name:'2层Binpack',
+                    type:'line',
+                    stack: '',
+                    data:data2simple
+                },
+                {
+                    name:'3层Binpack',
+                    type:'line',
+                    stack: '',
+                    data:data3complex
+                },
+                {
+                    name:'容错2层Binpack',
+                    type:'line',
+                    stack: '',
+                    data:data_safe2simple
+                },
+                {
+                    name:'容错3层Binpack',
+                    type:'line',
+                    stack: '',
+                    data:data_safe3complex
+                }]
+        });
+    });
+
+    </script>
+</body>
+</html>
