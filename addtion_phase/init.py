@@ -400,7 +400,7 @@ def find_docker_onHM(bins, hm):
 
 def error_Tolerance(bins, p_destroy):
     '''
-
+    2017-12-18 容错衡量模型
     '''
     n = 0  # 代表停止服务的数量
 
