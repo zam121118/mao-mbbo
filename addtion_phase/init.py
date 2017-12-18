@@ -45,6 +45,15 @@ def map_v2h(popu1, size):
     map_v_h = dict(popu1['population'][size])
     return map_v_h
 
+def map_h2v(bins):
+    '''
+    依据bins中map_v_h，将其转为hm为key，vms list为value的字典
+    '''
+    # 转换map_v_h为map_h_v
+    map_h_v = collections.defaultdict(list)
+    for key, value in bins['map_v_h'].items():
+        map_h_v[value].append(key)
+    return map_h_v
 
 def range2rect(size, num_var, type0):
     '''
@@ -150,7 +159,6 @@ def make_population(size, num_var, c_rp, c_rm, v_rp, v_rm): #    作为全局变
     }
     return population0
 
-
 def initialize_population(popu1, size, num_var):
     '''
     初始化docker容器放置的vm编号，以及vm所能放置的hm编号，并计算初代种群的各项数值
@@ -249,8 +257,12 @@ def create_addtion_list(rp_u, rm_u, p, addtion_nums):
     }
     return addtion0
 
-
-def main_init(num_var, p, addtion_nums):
+def main_init(num_var, p):
+    '''
+    num_var为集群初始化的vm、hm、容器个数
+    2017-12-18 更新：
+      该方法仅生成初始集群，不生成addtion0
+    '''
     # 1.算法主要参数设置
     rp_u = 0.25                            # 容器请求CPU的指导变量
     rm_u = 0.25                            # 容器请求MEM的指导变量
@@ -275,7 +287,7 @@ def main_init(num_var, p, addtion_nums):
     popu0 = copy.deepcopy(init_popu) # 保存集群初始状态
 
     # 4. 生成新增容器序列
-    addtion0 = create_addtion_list(rp_u, rm_u, p, addtion_nums)
+    # addtion0 = create_addtion_list(rp_u, rm_u, p, addtion_nums)
 
     # print 'init_popu = {0}, \n addtion0 = {1} \n'.format(init_popu, addtion0)
     # 写入FFDSum文件中
@@ -287,16 +299,118 @@ def main_init(num_var, p, addtion_nums):
     # 5. 针对two-domensions（cpu,mem）使用FFDProd、FFDSum、Dot-product（此处进行改进，使用cosine）、L2（基于鸥几里得距离）
     # 注意： Swarm scheduler 的binpack strategy 即类似于 FFDSum，通过求weight进行打分，
     # 详见github.com/docker/swarm/blob/master/scheduler/strategy/weighted_node.go或者图库截图
+    return init_popu
 
-    # result0 = FFDProd()
-    # result1 = FFDSum(popu0, addtion0)         # 此处FFDSum使用于swarm相同的strategy
-    # result2 = Dot_product(popu0, addtion0)
-    # result3 = l2()
-    return (init_popu, addtion0)
+def create_addtion(p, addtion_nums):
+    '''
+    2017-12-18 更新：
+        创建批量新增addtion0，所有容器规格由p指导
+    '''
+    # 1.算法主要参数设置
+    rp_u = 0.25                            # 容器请求CPU的指导变量
+    rm_u = 0.25                            # 容器请求MEM的指导变量
+    p = p                                  # 控制容器cpu,mem的资源相关度
+    # 2. 生成新增容器序列
+    addtion0 = create_addtion_list(rp_u, rm_u, p, addtion_nums)
+    return addtion0
 
+def detect_independce(bins, max_suffix, addtion0):
+    '''
+    @para: bins 经过初步算法安排的放置方案；addtion0该批新增实例服务及其replicas便于独立性检测;
+           max_suffix记录上次满足服务容错（独立性的）的最大容器下标，本次检测从该下标之最大下标进行检测
+    @func: 从init_server至最大，依据addtion0中各服务容器及其replicas依次检测其在bins['population']对应HM编号，
+            当某服务的多个replicas同时放置于一个HM，则至少变换一个replica使其与集群中最大下标HM上某容器交换位置，
+            直至检查完所有的service并返回修复独立性之后的bins
+    '''
+    # 遍历所有容器service
+    for x in xrange(len(addtion0['c_rp'])):
+        # 各服务所需容器配置及replicas数量
+        object_CPU, object_MEM, i = addtion0['c_rp'][x], addtion0['c_rm'][x], addtion0['replicas'][x]
+        # 若该服务replica为1，即单节点独立; 若为0说明服务启动失败，没有实际容器放置
+        if i == 1 or i == 0:
+            continue
+        # 该服务所有replicas对应HM下标
+        suffix = [bins['population'][0][max_suffix+j][-1] for j in xrange(1,i+1)]
+        # 独立性检测， 若该suffix所有HM值均相同则不满足需要修复，否则满足
+        num_hms = len(set(suffix))
+        # 若满足独立性，则进行下一个服务检测
+        if num_hms != 1:
+            continue
+
+        # 不满足独立性需要进行修复
+        flag = False           # 还未修复为False
+        # 对该服务的第一个支撑replica从active HMs最大下标者开始依次往前，寻找可与该容器对调换位置的容器
+        used_hms = bins['map_v_h'].values().remove(suffix[0])
+        for hm in sorted(used_hms, reverse=True):
+            dockers, vms = find_docker_onHM(bins,hm)
+            # 依次寻找其他HM上可与该服务第一个replica对掉而满足双方资源约束的解
+            origin_vm_suffix = bins['population'][0][max_suffix+1][0]
+            for i in xrange(len(dockers)):
+                vm_suffix = vms[i]
+                docker_suffix = dockers[i]
+                # 换出原docker换入replica之后的资源
+                reversed_cpu1 = bins['v_rp'][0][vm_suffix] - (bins['v_p_cost'][0][vm_suffix] - bins['c_rp'][docker_suffix] + object_CPU)
+                reversed_mem1 = bins['v_rm'][0][vm_suffix] - (bins['v_m_cost'][0][vm_suffix] - bins['c_rm'][docker_suffix] + object_MEM)
+                # 换入新容器换出replica后的资源
+                reversed_cpu0 = bins['v_rp'][0][origin_vm_suffix] - (bins['v_p_cost'][0][origin_vm_suffix] + bins['c_rp'][docker_suffix] - object_CPU)
+                reversed_mem0 = bins['v_rm'][0][origin_vm_suffix] - (bins['v_m_cost'][0][origin_vm_suffix] + bins['c_rm'][docker_suffix] - object_MEM)
+                # 若对换后满足资源约束，则更新集群
+                if reversed_cpu0 >= 0 and reversed_cpu1 >= 0 and reversed_mem0 >= 0 and reversed_mem1 >=0:
+                    bins['v_p_cost'][0][vm_suffix] += (object_CPU - bins['c_rp'][docker_suffix])
+                    bins['v_m_cost'][0][vm_suffix] += (object_MEM - bins['c_rm'][docker_suffix])
+                    bins['v_p_cost'][0][origin_vm_suffix] += (bins['c_rp'][docker_suffix] - object_CPU)
+                    bins['v_m_cost'][0][origin_vm_suffix] += (bins['c_rm'][docker_suffix] - object_MEM)
+                    bins['population'][0][max_suffix+1] = [vm_suffix, hm]
+                    bins['population'][0][docker_suffix] = [origin_vm_suffix, suffix]
+                    # map_v_h由于是对掉并不会产生新的拓扑变化，故不用更新
+                    flag = True
+                    break
+            # 若在该hm上对换而修复，则推出本次service修复，进入下一个
+            if flag:
+                break
+            # 否则继续寻找下一个hm
+        # 若所有active HMs均无发用于修复独立性,则新建HM与VM
+        if not flag:
+            vm = create_VM_random(object_CPU, object_MEM, vm_option)
+            vm_suffix = len(bins['v_p_cost'][0])
+            hm_suffix = len(bins['h_m_cost'][0])
+            bins['v_p_cost'][0].append(object_CPU)
+            bins['v_m_cost'][0].append(object_MEM)
+            bins['v_rp'].append(vm['rp'])
+            bins['v_rm'].append(vm['rm'])
+            bins['h_p_cost'][0].append(vm['rp'])
+            bins['h_m_cost'][0].append(vm['rm'])
+            bins['map_v_h'][vm_suffix] = hm_suffix
+            bins['population'][0][max_suffix+1] = [vm_suffix, hm_suffix]
+            flag = True
+        
+    return bins
+
+def find_docker_onHM(bins, hm):
+    '''
+    给定集群以及active HM下标，返回该HM上承载的所有容器下标及vm下标
+    '''
+    dockers, vms = [], []
+    for i in xrange(len(bins['c_rp'])):
+        v, h = bins['population'][0][i]
+        if h == hm:
+            dockers.append(i)
+            vms.append(v)
+    return (dockers,vm)
+
+def error_Tolerance(bins, p_destroy):
+    '''
+
+    '''
+    n = 0  # 代表停止服务的数量
+
+
+
+    return n
 
 if __name__=='__main__':
-    init_popu, addtion0 = main_init(50, 1.0, 600)
+    init_popu = main_init(100, 1.0)
+    addtion0 = create_addtion(1.0, 600)
     # print init_popu,'\n',addtion0
     with open('addtion_phase//test.py', 'a') as f:
         f.flush()
