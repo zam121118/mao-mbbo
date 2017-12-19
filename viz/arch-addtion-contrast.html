@@ -108,15 +108,43 @@
         // },
         xAxis: {
             type: 'category',
+            name:'总容器数量(个)',
             boundaryGap: true,//false
             data: []
         },
         yAxis: {
+            name:'激活态HM数量(台)',
             type: 'value'
         },
         // 设置dataRoom
-        dataRoom:[
-
+        dataZoom:[
+            {
+                type: 'slider',
+                show: true,
+                xAxisIndex: [0],
+                start: 50,
+                end: 100
+            },
+            {
+                type: 'slider',
+                show: true,
+                yAxisIndex: [0],
+                left: '93%',
+                start: 50,
+                end: 100
+            },
+            {
+                type: 'inside',
+                xAxisIndex: [0],
+                start: 50,
+                end: 100
+            },
+            {
+                type: 'inside',
+                yAxisIndex: [0],
+                start: 50,
+                end: 100
+            }
         ],
         series: [
             {
@@ -164,7 +192,7 @@
     // });
 
     // 异步加载数据
-    $.get('./contrast-addtion-demo.json').done(function (data) {
+    $.get('./contrast-addtion-demo1-1.json').done(function (data) {
         // 填入数据
         console.log("进入数据加载方法");
         datascale = data.scale;
