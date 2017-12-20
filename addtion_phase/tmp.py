@@ -30,9 +30,10 @@ def detect_independce(bins, max_suffix, addtion0):
         if i == 1 or i == 0:
             continue
         # 该服务所有replicas对应HM下标
-        suffix = [bins['population'][0][max_suffix+j][-1] for j in xrange(1,i+1)]
+        dockers = service2docker(x, max_suffix, bins['population'][0], addtion0)
+        service2hms = [bins['population'][0][j][-1] for j in dockers]
         # 独立性检测， 若该suffix所有HM值均相同则不满足需要修复，否则满足
-        num_hms = len(set(suffix))
+        num_hms = len(set(service2hms))
         # 若满足独立性，则进行下一个服务检测
         if num_hms != 1:
             continue
@@ -40,28 +41,30 @@ def detect_independce(bins, max_suffix, addtion0):
         # 不满足独立性需要进行修复
         flag = False           # 还未修复为False
         # 对该服务的第一个支撑replica从active HMs最大下标者开始依次往前，寻找可与该容器对调换位置的容器
-        used_hms = bins['map_v_h'].values().remove(suffix[0])
+        origin_docker_suffix = dockers[0]
+        used_hms = bins['map_v_h'].values()
+        used_hms.remove(service2hms[0])
+        origin_vm_suffix = bins['population'][0][origin_docker_suffix][0]
         for hm in sorted(used_hms, reverse=True):
             dockers, vms = find_docker_onHM(bins,hm)
             # 依次寻找其他HM上可与该服务第一个replica对掉而满足双方资源约束的解
-            origin_vm_suffix = bins['population'][0][max_suffix+1][0]
             for i in xrange(len(dockers)):
                 vm_suffix = vms[i]
                 docker_suffix = dockers[i]
                 # 换出原docker换入replica之后的资源
-                reversed_cpu1 = bins['v_rp'][0][vm_suffix] - (bins['v_p_cost'][0][vm_suffix] - bins['c_rp'][docker_suffix] + object_CPU)
-                reversed_mem1 = bins['v_rm'][0][vm_suffix] - (bins['v_m_cost'][0][vm_suffix] - bins['c_rm'][docker_suffix] + object_MEM)
+                reversed_cpu1 = bins['v_rp'][vm_suffix] - (bins['v_p_cost'][0][vm_suffix] - bins['c_rp'][docker_suffix] + object_CPU)
+                reversed_mem1 = bins['v_rm'][vm_suffix] - (bins['v_m_cost'][0][vm_suffix] - bins['c_rm'][docker_suffix] + object_MEM)
                 # 换入新容器换出replica后的资源
-                reversed_cpu0 = bins['v_rp'][0][origin_vm_suffix] - (bins['v_p_cost'][0][origin_vm_suffix] + bins['c_rp'][docker_suffix] - object_CPU)
-                reversed_mem0 = bins['v_rm'][0][origin_vm_suffix] - (bins['v_m_cost'][0][origin_vm_suffix] + bins['c_rm'][docker_suffix] - object_MEM)
+                reversed_cpu0 = bins['v_rp'][origin_vm_suffix] - (bins['v_p_cost'][0][origin_vm_suffix] + bins['c_rp'][docker_suffix] - object_CPU)
+                reversed_mem0 = bins['v_rm'][origin_vm_suffix] - (bins['v_m_cost'][0][origin_vm_suffix] + bins['c_rm'][docker_suffix] - object_MEM)
                 # 若对换后满足资源约束，则更新集群
                 if reversed_cpu0 >= 0 and reversed_cpu1 >= 0 and reversed_mem0 >= 0 and reversed_mem1 >=0:
                     bins['v_p_cost'][0][vm_suffix] += (object_CPU - bins['c_rp'][docker_suffix])
                     bins['v_m_cost'][0][vm_suffix] += (object_MEM - bins['c_rm'][docker_suffix])
                     bins['v_p_cost'][0][origin_vm_suffix] += (bins['c_rp'][docker_suffix] - object_CPU)
                     bins['v_m_cost'][0][origin_vm_suffix] += (bins['c_rm'][docker_suffix] - object_MEM)
-                    bins['population'][0][max_suffix+1] = [vm_suffix, hm]
-                    bins['population'][0][docker_suffix] = [origin_vm_suffix, suffix]
+                    bins['population'][0][origin_docker_suffix] = [vm_suffix, hm]
+                    bins['population'][0][docker_suffix] = [origin_vm_suffix, service2hms[0]]
                     # map_v_h由于是对掉并不会产生新的拓扑变化，故不用更新
                     flag = True
                     break
@@ -81,10 +84,10 @@ def detect_independce(bins, max_suffix, addtion0):
             bins['h_p_cost'][0].append(vm['rp'])
             bins['h_m_cost'][0].append(vm['rm'])
             bins['map_v_h'][vm_suffix] = hm_suffix
-            bins['population'][0][max_suffix+1] = [vm_suffix, hm_suffix]
+            bins['population'][0][origin_docker_suffix] = [vm_suffix, hm_suffix]
             flag = True
         
-    return bins['population']
+    return bins['population'][0]
 
 def find_docker_onHM(bins, hm):
     '''
@@ -97,7 +100,6 @@ def find_docker_onHM(bins, hm):
             dockers.append(i)
             vms.append(v)
     return (dockers,vms)
-
 
 def create_VM_random(c_rp, c_rm, vm_option):
     '''
@@ -119,18 +121,16 @@ def create_VM_random(c_rp, c_rm, vm_option):
             break
     return vm
 
-
 def service2docker(service_suffix, max_suffix, population, addtion0):
     '''
     根据集群中bins['population']与容器增量addtion0，以及集群初始化时已有的容器的最大下标max_suffix
     返回支持第service_suffix号服务的所有容器下标
     '''
-    start = sum(addtion0['replicas'][:service_suffix]) + init_num + 1
+    start = sum(addtion0['replicas'][:service_suffix]) + max_suffix + 1
     end = start + addtion0['replicas'][service_suffix]
     # 若服务对应的副本数量为空，则其dockersf为空列表
     dockers = [i for i in xrange(start, end)]
     return dockers
-
 
 def docker2service(docker_suffix, max_suffix, population, addtion0):
     '''
@@ -139,10 +139,10 @@ def docker2service(docker_suffix, max_suffix, population, addtion0):
     '''
     services = []
     # 使用折半查找
-    high = len(addtion0)
+    high = len(addtion0['replicas'])
     low = 0
     mid = (low+high+1)/2
-    while True:
+    while high>=0:
         dockers = service2docker(mid, max_suffix, population, addtion0)
         # 列表为空，该服务实际没有运行容器
         if not dockers:
@@ -166,8 +166,7 @@ def docker2service(docker_suffix, max_suffix, population, addtion0):
         print "找不到容器对应的服务，有错"
         sys.exit()
 
-
-def simulate_crash_HM(p_crash, max_suffix, bins):
+def simulate_crash_HM(p_crash, max_suffix, bins, addtion0):
     '''
     通过HMs被宕机概率选中来模拟集群HMs宕机现象，并计算因这些机器crash而造成的服务终止问题，使用容错力衡量公式进行计算
     tolerance = a*N_severity+b*N_medium+c*N_mild, a，b, c分别取10,3,1
@@ -179,29 +178,29 @@ def simulate_crash_HM(p_crash, max_suffix, bins):
     # 模拟宕机，记录宕机序列
     for h in active_hms:
         # 即该HM被crash
-        if random.random < p_crash:
+        if random.random() < p_crash:
             crash_hms.append(h)
             dockers, vms = find_docker_onHM(bins, h)
             # 遍历dockers
             for d in dockers:
+                # 认为max_suffix及之前的容器服务均满足容错性
+                if d <= max_suffix:
+                    continue
                 services = docker2service(d, max_suffix, bins['population'][0], addtion0) # 容器对应的服务
                 hms = [bins['population'][0][i][-1] for i in services[-1]]    # 该服务的支撑容器所分布的HM编号列表
                 dangerous_num = hms.count(h)                                  # 处于危险状态的容器数量
                 safe_num = len(hms) - hms.count(h)
                 if safe_num < 1:
                     N_severity += 1
-                elif safe_num < 2 and num >= 1:
+                elif safe_num < 2 and safe_num >= 1:
                     N_medium += 1
                 elif safe_num >= 2:
                     N_mild += 1
-                crash_services[services[0]] = dangerous_num
+                crash_services[services[0]] = [dangerous_num, safe_num]
         continue
     # 计算方案容错能力
     tolerance = 10 * N_severity + 3 * N_medium + N_mild
     return tolerance,crash_hms,crash_services
-
-
-
 
 if __name__=='__main__':
     '''
@@ -224,12 +223,15 @@ if __name__=='__main__':
     'replicas': [2, 1, 0, 3, 4, 2, 0, 5, 4, 1, 2, 0, 1, 4, 0, 5, 0, 4, 5, 2, 3, 4, 3, 0, 1, 0, 4, 1, 4, 4, 4, 3, 1, 5, 0, 5, 3, 5, 3, 4, 0, 4, 3, 5, 3, 2, 0, 4, 0, 1, 2, 1, 2, 4, 2, 4, 0, 1, 5, 1, 0, 5, 5, 1, 0, 2, 1, 2, 1, 1, 3, 2, 0, 1, 1, 0, 4, 4, 1, 0, 5, 1, 2, 5, 2, 5, 0, 5, 5, 1, 0, 2, 0, 0, 2, 1, 1, 5, 3, 4, 0, 0, 3, 5, 4, 3, 5, 5, 2, 4, 3, 5, 3, 4, 1, 2, 2, 3, 3, 4, 0, 1, 4, 4, 4, 5, 5, 1, 3, 3, 4, 3, 3, 2, 2, 5, 1, 1, 0, 4, 2, 0, 5, 0, 5, 1, 5, 3, 2, 5, 5, 1, 2, 3, 2, 1, 1, 4, 5, 1, 4, 0, 1, 0, 2, 5, 0, 0, 1, 0, 2, 3, 5, 2, 5, 0, 0, 2, 5, 1, 3, 5, 0, 0, 1, 5, 4, 3, 4, 5, 5, 2, 2, 3, 2, 4, 3, 3, 1, 2]
     }
     max_suffix = 99
+    origin_popu = copy.deepcopy(bins['population'][0])
+    # 未进行修复之前进行容错能力计算
+    tolerance0, crash_hms0, crash_services0 = simulate_crash_HM(0.5, max_suffix, bins, addtion0)
     # 独立性检测与修复
     popu = detect_independce(bins, max_suffix, addtion0)
     # 容错力计算
-    tolerance, crash_hms, crash_services = simulate_crash_HM(0.08, max_suffix, bins)
-    s0 =  'bins = {}\n'.format(popu)
-    s1 = '\n该方案的容错能力指数 = {}, crash_hms = {}, crash_services = {}'.format(tolerance, crash_hms, crash_services)
+    tolerance, crash_hms, crash_services = simulate_crash_HM(0.5, max_suffix, bins)
+    s0 =  'origin_popu = {}\n\nnew_popu = {}\n'.format(origin_popu, popu)
+    s1 = '\n旧方案容错指数 = {}，old_crash_hms ={}， crash_services = {}\n 新方案的容错能力指数 = {}, crash_hms = {}, crash_services = {}'.format(tolerance0, crash_hms0, crash_services0, tolerance, crash_hms, crash_services)
 
 
     with open('addtion_phase//Result_Contrast.py','a') as f:
