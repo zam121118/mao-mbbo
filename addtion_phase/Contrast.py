@@ -649,14 +649,14 @@ def compute_costs(bins, size=1):
         # 计算负载平均差（方差算数平方跟）
         cost['v_balance_cost'] = math.sqrt(cost['v_balance_cost'] / len(used_vms))
         cost['h_balance_cost'] = math.sqrt(cost['h_balance_cost'] / len(used_hms))
-        cost['degree_of_concentration'] = 100 * cost['used_hms'] + 1 * utilization
+        cost['degree_of_concentration'] = 100 * cost['used_hms'] - 13 * utilization
 
         # 计算VM迁移时间（仅聚合阶段）
         pass
 
     # # print 'true cost={}'.format(cost)
     # return cost
-    return cost['used_hms']
+    return cost['used_hms'], cost['degree_of_concentration']
 
 def faked_cost(bins, size=1):
     '''
@@ -746,15 +746,19 @@ def createJSON(data, addtion_scale, cost0, cost1, cost2=0, cost3=0):
     data['safe_complex'].append(cost3)
     return data
 
-def main_controller(bins, addtion0, func_handler):
+def main_controller(function_str, bins, addtion0, func_handler, return_dict):
     '''
+    2017-12-20 23:00 使用多进程共享变量
+    function_str用于标识哪个方法:
+    0=FFDSum_simple 1=FFDSum_complex 2=safe_FFDSum_simple 3=safe_FFDSum_complex
     使用函数句柄实现不同方法的串行计算逻辑
     '''
     # 初始放置方案的计算
     after_bins, used_time = func_handler(bins, addtion0)
     # 该方案的目标优化结果
-    cost = compute_costs(after_bins)
-    return func_handler ,cost
+    used_hm, utilization = compute_costs(after_bins)
+    return_dict[function_str] = [used_hm, utilization]
+    return return_dict
 
 
 if __name__ == '__main__':
@@ -762,11 +766,12 @@ if __name__ == '__main__':
     对于Docker+VM与Docker+VM+HM架构下，不同排序策略的BFD下，重复Gen次取各项指标均值的对比
     '''
     # 多进程初始化
-    p0 = multiprocessing.Pool()
-    p1 = multiprocessing.Pool()
+    # p = multiprocessing.Pool()
+    manager = multiprocessing.Manager()
+    jobs = []
 
     # 重复次数
-    Gen = 5
+    Gen = 6
        
     # 1. 用于生成json的数据
     data = {
@@ -783,20 +788,20 @@ if __name__ == '__main__':
     init_popu2 = copy.deepcopy(init_popu1)
     init_popu3 = copy.deepcopy(init_popu2)
 
-    cycle = [100, 300, 500, 700, 900]#, 1200, 1500, 1700, 1900, 2000, 2200, 2500, 3000]
-    # for i in xrange(1, 6):
-    #     a = 10 ** i
-    #     ll = sorted(random.sample(range(1,10), 4))
-    #     for j in ll:
-    #         cycle.append(j*a)
+    cycle = []
+    for i in xrange(1, 7):
+        a = 10 ** i
+        ll = sorted(random.sample(range(1,10), 4))
+        for j in ll:
+            cycle.append(j*a)
 
     # 3. 模拟多批量新增场景
     for scale in cycle:
         avg_scale = 0
-        avg_simple = 0
-        avg_complex = 0
-        avg_safe_simple = 0
-        avg_safe_complex = 0
+        avg_simple = [0, 0]
+        avg_complex = [0, 0]
+        avg_safe_simple = [0, 0]
+        avg_safe_complex = [0, 0]
 
         # 运行10次，取效果最好者
         for gen in xrange(Gen):
@@ -806,22 +811,34 @@ if __name__ == '__main__':
             cost0 = compute_costs(init_popu0)
 
             # 对初始集群的多副本进行不同放置决策并计算优化模型结果
-            print p0.map(main_controller, init_popu0, addtion0, FFDSum_simple)
-            print p1.map(main_controller, init_popu1, addtion0, FFDSum_complex)
+            #[x.get() for x in [pool.apply_async(pool_test, (x,)) for x in gen_list(l)]]
+            return_dict = manager.dict()
+            p = multiprocessing.Process(target=main_controller, args=(0, init_popu0, addtion0, FFDSum_simple, return_dict))
+            jobs.append(p)
+            p.start()
+            p = multiprocessing.Process(target=main_controller, args=(1, init_popu1, addtion0, FFDSum_complex, return_dict))
+            jobs.append(p)
+            p.start()
 
+            # print p.map(main_controller, (init_popu0, init_popu1), (addtion0, addtion0), (FFDSum_simple, FFDSum_complex))
+
+            for proc in jobs:
+                proc.join()
+            # print return_dict.values()
+            avg_simple[0] += return_dict[0][0]
+            avg_simple[1] += return_dict[0][1]
+            avg_complex[0] += return_dict[1][0]
+            avg_complex[1] += return_dict[1][1]
+            avg_safe_simple = 0
+            avg_safe_complex = 0
         # 计算迭代gen代的平均值,并写入文件
         avg_scale /= Gen
-        avg_simple /= Gen
-        avg_complex /= Gen
+        avg_simple[0] /= Gen
+        avg_complex[0] /= Gen
+        avg_simple[1] /= Gen
+        avg_complex[1] /= Gen
         data = createJSON(data, avg_scale, avg_simple, avg_complex, avg_safe_simple, avg_safe_complex)
-
-    # 4. 记录data用于前端数据可视化
+    # # 4. 记录data用于前端数据可视化
     with open('.//viz//contrast-addtion-{}-demo.json'.format(datetime.datetime.now()),'w') as f:
         f.flush()
         json.dump(data, f, indent=2)
-
-    # with open('addtion_phase//Result_Contrast.py','a') as f:
-    #     f.flush()
-    #     f.write(s0)
-    #     f.write(s1)
-    #     f.write(s2)

@@ -409,8 +409,8 @@ def error_Tolerance(bins, p_destroy):
     return n
 
 if __name__=='__main__':
-    init_popu = main_init(100, 1.0)
-    addtion0 = create_addtion(1.0, 600)
+    init_popu = main_init(50, 1.0)
+    addtion0 = create_addtion(1.0, 30)
     # print init_popu,'\n',addtion0
     with open('addtion_phase//test.py', 'a') as f:
         f.flush()
