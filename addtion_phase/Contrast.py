@@ -750,7 +750,7 @@ def createJSON(data, addtion_scale, cost0, cost1, cost2=0, cost3=0):
 def main_controller(function_str, bins, addtion0, func_handler, return_dict):
     '''
     2017-12-20 23:00 使用多进程共享变量与多进程实现4种方式并行计算
-    function_str用于标识哪个方法,0=FFDSum_simple 1=FFDSum_complex 2=safe_FFDSum_simple 3=safe_FFDSum_complex
+    function_str用于标识哪个方法,0=FFDSum_simple 1=FFDSum_complex 2=FFDSum_simple 3=FFDSum_complex
     使用函数句柄实现不同方法的串行计算逻辑
     '''
     # 初始放置方案的计算
@@ -763,15 +763,17 @@ def main_controller(function_str, bins, addtion0, func_handler, return_dict):
 
 if __name__ == '__main__':
     '''
+    2017-12-21 更新：
+       调整多进程思路,使用与实验重复次数相同两倍的进程池数目今进行并行计算,速率大大提高
     对于Docker+VM与Docker+VM+HM架构下，不同排序策略的BFD下，重复Gen次取各项指标均值的对比
     '''
-    # 多进程初始化
+       # 多进程初始化
     # p = multiprocessing.Pool()
     manager = multiprocessing.Manager()
     jobs = []
 
-    # 重复次数
-    Gen = 3
+    # 并行进程数目（其中Gen/2即为重复次数）
+    Gen = 4
        
     # 1. 用于生成json的数据
     data = {
@@ -783,13 +785,13 @@ if __name__ == '__main__':
     }
 
     # 2. 产生新初始集群与新增容器的服务数量
-    init_popu0 = main_init(50, 1.0)
-    init_popu1 = copy.deepcopy(init_popu0)
-    init_popu2 = copy.deepcopy(init_popu1)
-    init_popu3 = copy.deepcopy(init_popu2)
+    init_popu0 = main_init(50, 1.0)      # 用于simple算法
+    init_popu1 = copy.deepcopy(init_popu0)   # 用于complex算法
+    init_popu2 = copy.deepcopy(init_popu1)   # 用于simple算法
+    init_popu3 = copy.deepcopy(init_popu2)   # 用于complex算法
 
     cycle = []
-    for i in xrange(1, 3):
+    for i in xrange(1, 4):
         a = 10 ** i
         ll = sorted(random.sample(range(1,10), 4))
         for j in ll:
@@ -797,48 +799,151 @@ if __name__ == '__main__':
 
     # 3. 模拟多批量新增场景
     for scale in cycle:
-        avg_scale = 0
         avg_simple = [0, 0]
         avg_complex = [0, 0]
         avg_safe_simple = [0, 0]
         avg_safe_complex = [0, 0]
 
-        # 运行10次，取效果最好者
+        # 为了体现随机性，分别为各进程生成每批的新增服务及其副本
+        addtion0 = create_addtion(1.0, scale)
+        addtion1 = create_addtion(1.0, scale)
+        avg_scale = 2 * len(init_popu0['c_rp']) + sum(addtion0['replicas']) + sum(addtion1['replicas'])
+
+        # 设置共享变量用于保存多进程优化目标值
+        return_dict = manager.dict()
+        # 用Gen个进程并行运行，取均值
         for gen in xrange(Gen):
-            # 记录初始集群信息并深度拷贝多副本用于算法间对比
-            addtion0 = create_addtion(1.0, scale)
-            avg_scale += len(init_popu0['c_rp']) + sum(addtion0['replicas'])
-            cost0 = compute_costs(init_popu0)
-
-            # 对初始集群的多副本进行不同放置决策并计算优化模型结果
-            #[x.get() for x in [pool.apply_async(pool_test, (x,)) for x in gen_list(l)]]
-            return_dict = manager.dict()
-            p = multiprocessing.Process(target=main_controller, args=(0, init_popu0, addtion0, FFDSum_simple, return_dict))
-            jobs.append(p)
-            p.start()
-            p = multiprocessing.Process(target=main_controller, args=(1, init_popu1, addtion0, FFDSum_complex, return_dict))
-            jobs.append(p)
-            p.start()
-
-            # print p.map(main_controller, (init_popu0, init_popu1), (addtion0, addtion0), (FFDSum_simple, FFDSum_complex))
-
-            for proc in jobs:
-                proc.join()
-            # print return_dict.values()
-            avg_simple[0] += return_dict[0][0]
-            avg_simple[1] += return_dict[0][1]
-            avg_complex[0] += return_dict[1][0]
-            avg_complex[1] += return_dict[1][1]
-            avg_safe_simple = 0
-            avg_safe_complex = 0
+            if gen == 0:
+                # simple算法
+                p = multiprocessing.Process(target=main_controller, args=(0, init_popu0, addtion0, FFDSum_simple, return_dict))
+                jobs.append(p)
+                p.start()
+            elif gen == 1:
+                # complex 算法
+                p = multiprocessing.Process(target=main_controller, args=(1, init_popu1, addtion0, FFDSum_complex, return_dict))
+                jobs.append(p)
+                p.start()
+            elif gen == 2:
+                # simple算法
+                p = multiprocessing.Process(target=main_controller, args=(2, init_popu2, addtion1, FFDSum_simple, return_dict))
+                jobs.append(p)
+                p.start()
+            elif gen == 3:
+                # complex算法
+                p = multiprocessing.Process(target=main_controller, args=(3, init_popu3, addtion1, FFDSum_complex, return_dict))
+                jobs.append(p)
+                p.start()
+        
+        # 批量阻塞放置进程退出
+        for proc in jobs:
+            proc.join()
+        
         # 计算迭代gen代的平均值,并写入文件
-        avg_scale /= Gen
-        avg_simple[0] /= Gen
-        avg_complex[0] /= Gen
-        avg_simple[1] /= Gen
-        avg_complex[1] /= Gen
+        avg_simple[0] += (return_dict[0][0] + return_dict[2][0])
+        avg_simple[1] += (return_dict[0][1] + return_dict[2][1])
+        avg_complex[0] += (return_dict[1][0] + return_dict[3][0])
+        avg_complex[1] += (return_dict[1][1] +return_dict[3][1])
+        avg_safe_simple = 0
+        avg_safe_complex = 0
+        avg_scale /= Gen/2
+        avg_simple[0] /= Gen/2
+        avg_complex[0] /= Gen/2
+        avg_simple[1] /= Gen/2
+        avg_complex[1] /= Gen/2
         data = createJSON(data, avg_scale, avg_simple, avg_complex, avg_safe_simple, avg_safe_complex)
-    # # 4. 记录data用于前端数据可视化
+    ## 4. 记录data用于前端数据可视化
     with open('.//viz//contrast-addtion-{}-demo.json'.format(datetime.datetime.now()),'w') as f:
         f.flush()
         json.dump(data, f, indent=2)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    # # 多进程初始化
+    # # p = multiprocessing.Pool()
+    # manager = multiprocessing.Manager()
+    # jobs = []
+
+    # # 重复次数
+    # Gen = 3
+       
+    # # 1. 用于生成json的数据
+    # data = {
+    #     'scale':[],
+    #     'simple':[],
+    #     'complex':[],
+    #     'safe_simple':[],
+    #     'safe_complex':[]
+    # }
+
+    # # 2. 产生新初始集群与新增容器的服务数量
+    # init_popu0 = main_init(50, 1.0)
+    # init_popu1 = copy.deepcopy(init_popu0)
+    # init_popu2 = copy.deepcopy(init_popu1)
+    # init_popu3 = copy.deepcopy(init_popu2)
+
+    # cycle = []
+    # for i in xrange(1, 3):
+    #     a = 10 ** i
+    #     ll = sorted(random.sample(range(1,10), 4))
+    #     for j in ll:
+    #         cycle.append(j*a)
+
+    # # 3. 模拟多批量新增场景
+    # for scale in cycle:
+    #     avg_scale = 0
+    #     avg_simple = [0, 0]
+    #     avg_complex = [0, 0]
+    #     avg_safe_simple = [0, 0]
+    #     avg_safe_complex = [0, 0]
+
+    #     # 运行10次，取效果最好者
+    #     for gen in xrange(Gen):
+    #         # 记录初始集群信息并深度拷贝多副本用于算法间对比
+    #         addtion0 = create_addtion(1.0, scale)
+    #         avg_scale += len(init_popu0['c_rp']) + sum(addtion0['replicas'])
+    #         cost0 = compute_costs(init_popu0)
+
+    #         # 对初始集群的多副本进行不同放置决策并计算优化模型结果
+    #         #[x.get() for x in [pool.apply_async(pool_test, (x,)) for x in gen_list(l)]]
+    #         return_dict = manager.dict()
+    #         p = multiprocessing.Process(target=main_controller, args=(0, init_popu0, addtion0, FFDSum_simple, return_dict))
+    #         jobs.append(p)
+    #         p.start()
+    #         p = multiprocessing.Process(target=main_controller, args=(1, init_popu1, addtion0, FFDSum_complex, return_dict))
+    #         jobs.append(p)
+    #         p.start()
+
+    #         # print p.map(main_controller, (init_popu0, init_popu1), (addtion0, addtion0), (FFDSum_simple, FFDSum_complex))
+
+    #         for proc in jobs:
+    #             proc.join()
+    #         # print return_dict.values()
+    #         avg_simple[0] += return_dict[0][0]
+    #         avg_simple[1] += return_dict[0][1]
+    #         avg_complex[0] += return_dict[1][0]
+    #         avg_complex[1] += return_dict[1][1]
+    #         avg_safe_simple = 0
+    #         avg_safe_complex = 0
+    #     # 计算迭代gen代的平均值,并写入文件
+    #     avg_scale /= Gen
+    #     avg_simple[0] /= Gen
+    #     avg_complex[0] /= Gen
+    #     avg_simple[1] /= Gen
+    #     avg_complex[1] /= Gen
+    #     data = createJSON(data, avg_scale, avg_simple, avg_complex, avg_safe_simple, avg_safe_complex)
+    # # # 4. 记录data用于前端数据可视化
+    # with open('.//viz//contrast-addtion-{}-demo.json'.format(datetime.datetime.now()),'w') as f:
+    #     f.flush()
+    #     json.dump(data, f, indent=2)
