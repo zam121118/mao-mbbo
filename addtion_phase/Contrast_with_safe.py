@@ -23,17 +23,15 @@ vm_option = [(1.0, 1.0), (1.0, 0.8), (0.8, 0.7), (0.6, 0.5), (0.5, 0.4), (0.3, 0
 
 
 
-def detect_hm_independce(bins, max_suffix, total_addtion, addtion0):
+def detect_hm_independce(bins, max_suffix, addtion0):
     '''
     以HM为独立性基础
     @para: bins 经过初步算法安排的放置方案；addtion0该批新增实例服务及其replicas便于独立性检测;
-           max_suffix初始化集群的最大容器下标，本次检测从该下标之最大下标进行检测
-    @func: 增量式进行独立性检测，认为上次批量经过放置后，不存在问题，故从本次addtion0['repilicas']开始检测其在bins['population']对应HM编号，
+           max_suffix记录上次满足服务容错（独立性的）的最大容器下标，本次检测从该下标之最大下标进行检测
+    @func: 从init_server至最大，依据addtion0中各服务容器及其replicas依次检测其在bins['population']对应HM编号，
             当某服务的多个replicas同时放置于一个HM，则至少变换一个replica使其与集群中最大下标HM上某容器交换位置，
             直至检查完所有的service并返回修复独立性之后的bins
     '''
-    start = len(total_addtion) - len(addtion0['replicas'])
-    end = len(total_addtion) 
     # 遍历所有容器service
     for x in xrange(len(addtion0['c_rp'])):
         # 各服务所需容器配置及replicas数量
@@ -42,13 +40,12 @@ def detect_hm_independce(bins, max_suffix, total_addtion, addtion0):
         if i == 1 or i == 0:
             continue
         # 该服务所有replicas对应HM下标
-        dockers = service2docker(start+x, max_suffix, total_addtion)
+        dockers = service2docker(x, max_suffix, bins['population'][0], addtion0)
         try:
             service2hms = [bins['population'][0][j][-1] for j in dockers]
         except IndexError, e:
             print bins['population'][0][dockers[0]]
             print dockers
-            print x
         # 独立性检测， 若该suffix所有HM值均相同则不满足需要修复，否则满足
         num_hms = len(set(service2hms))
         # 若满足独立性，则进行下一个服务检测
@@ -106,36 +103,29 @@ def detect_hm_independce(bins, max_suffix, total_addtion, addtion0):
         
     return bins
 
-def detect_vm_independce(bins, max_suffix, total_addtion, addtion0):
+def detect_vm_independce(bins, max_suffix, addtion0):
     '''
     以VM为独立性基础
     @para: bins 经过初步算法安排的放置方案；addtion0该批新增实例服务及其replicas便于独立性检测;
-           max_suffix初始化集群的最大容器下标，本次检测从该下标之最大下标进行检测
-    @func: 增量式进行独立性检测，认为上次批量经过放置后，不存在问题，故从本次addtion0['repilicas']开始检测其在bins['population']对应VM编号，
-            此次检测服务初始下标为len(total_addtion)-
+           max_suffix记录上次满足服务容错（独立性的）的最大容器下标，本次检测从该下标之最大下标进行检测
+    @func: 从init_server至最大，依据addtion0中各服务容器及其replicas依次检测其在bins['population']对应VM编号，
             当某服务的多个replicas同时放置于一个VM，则在集群中FFD遍历其他VM,其上可与该容器尺寸者互换位置,
             直至检查完所有的service并返回修复独立性之后的bins
     '''
-    start = len(total_addtion) - len(addtion0['replicas'])
-    end = len(total_addtion) 
-    # 遍历本次新增的所有service（addtion0）
-    for x in xrange(len(addtion0['replicas'])):
+    # 遍历所有容器service
+    for x in xrange(len(addtion0['c_rp'])):
         # 各服务所需容器配置及replicas数量
         object_CPU, object_MEM, i = addtion0['c_rp'][x], addtion0['c_rm'][x], addtion0['replicas'][x]
         # 若该服务replica为1，即单节点独立; 若为0说明服务启动失败，没有实际容器放置
         if i == 1 or i == 0:
             continue
         # 该服务所有replicas对应HM下标
-        dockers = service2docker(x+start, max_suffix, total_addtion)
+        dockers = service2docker(x, max_suffix, bins['population'][0], addtion0)
         try:
             service2vms = [bins['population'][0][j][0] for j in dockers]
         except IndexError, e:
-            s0 = 'e={}\ndetect_vm_independence方法有问题：total_addtion={}\ndockers={}\nservice_suffix={}'.format(e, total_addtion, dockers, x)
-            s1 = "bins['population'][0]={}\ni={}\nstart={}\nend={}\naddtion0['replicas']={}".format(bins['population'][0],i, start, end, addtion0['replicas'])
-            with open('.//addtion_phase//aaa.py', 'a') as f:
-                f.flush()
-                f.write(s0)
-                f.write(s1)
+            print bins['population'][0][dockers[0]]
+            print dockers
         # 独立性检测， 若该suffix所有HM值均相同则不满足需要修复，否则满足
         num_hms = len(set(service2vms))
         # 若满足独立性，则进行下一个服务检测
@@ -213,9 +203,8 @@ def find_docker_onHM(bins, vhm, label):
     elif label == 1:
         return dockers_onVM
 
-def docker2service(map_d_s, max_service_suffix, addtion0):
+def docker2service(bins, map_d_s, max_service_suffix, addtion0):
     '''
-    对map_d_s持续追加的过程
     map_d_s是已有集群的docker-service，且此时docker最大下标为该list长度
     max_service_suffix是已有集群所有服务的最大下标
     对于一个给定的集群手动维护docker-service映射
@@ -227,19 +216,19 @@ def docker2service(map_d_s, max_service_suffix, addtion0):
             x -= 1
     return map_d_s
 
-def service2docker(service_suffix, max_suffix,total_addtion):
+def service2docker(service_suffix, max_suffix, population, addtion0):
     '''
-    根据集群中至今所有服务replicas列表total_addtion，以及集群初始化时已有的容器的最大下标max_suffix
+    根据集群中bins['population']与容器增量addtion0，以及集群初始化时已有的容器的最大下标max_suffix
     返回支持第service_suffix号服务的所有容器下标
     '''
-    start = sum(total_addtion[:service_suffix]) + max_suffix + 1
+    start = sum(addtion0['replicas'][:service_suffix]) + max_suffix + 1
     try:
-        end = start + total_addtion[service_suffix]
+        end = start + addtion0['replicas'][service_suffix]
         # 若服务对应的副本数量为空，则其dockersf为空列表
         dockers = [i for i in xrange(start, end)]
         return dockers
     except IndexError, e:
-        print 'service2docker方法有问题：', start, service_suffix
+        print start, service_suffix
         return False
 
 def deprated_docker2service(docker_suffix, max_suffix, population, addtion0):
@@ -280,7 +269,7 @@ def deprated_docker2service(docker_suffix, max_suffix, population, addtion0):
         print "找不到容器对应的服务，有错"
         sys.exit()
 
-def simulate_crash_HM(p_crash, max_suffix, bins, total_addtion, map_d_s):
+def simulate_crash_HM(p_crash, max_suffix, bins, addtion0, map_d_s):
     '''
     2017-12-20 22:00 更新：
         为了保证计算公平性，应使用宕机概率提前选出预备宕机HMs，再进行容错计算
@@ -306,8 +295,9 @@ def simulate_crash_HM(p_crash, max_suffix, bins, total_addtion, map_d_s):
                 if d <= max_suffix:
                     continue
                 print "开始找容器 {} 所属的服务".format(d)
+                #services = docker2service(d, max_suffix, bins['population'][0], addtion0) # 容器对应的服务
                 services = [map_d_s[d], 0]
-                services[-1] = service2docker(services[0], max_suffix, total_addtion)
+                services[-1] = service2docker(services[0], max_suffix, bins['population'][0], addtion0)
                 print "结束找容器 {} 所属的服务".format(d)
                 hms = [bins['population'][0][i][-1] for i in services[-1]]    # 该服务的支撑容器所分布的HM编号列表
                 dangerous_num = 0
@@ -326,23 +316,24 @@ def simulate_crash_HM(p_crash, max_suffix, bins, total_addtion, map_d_s):
     tolerance = 10 * N_severity + 3 * N_medium + N_mild
     return tolerance,crash_hms,crash_services
 
-def safe_FFDSum_simple(bins, total_addtion, addtion0):
+def safe_FFDSum_simple(bins, addtion0):
     '''
     调用Contrast模块FFDSum_simple方法进行初始放置计算；
     再使用本模块detect_vm_indepence方法进行VM Node独立性调整与修复
     '''
     after_bins, used_time = Contrast.FFDSum_simple(bins, addtion0)
-    after_bins = detect_vm_independce(after_bins, max_suffix, total_addtion, addtion0)
+    after_bins = detect_vm_independce(after_bins, max_suffix, addtion0)
     return after_bins
 
-def safe_FFDSum_complex(bins, total_addtion, addtion0):
+def safe_FFDSum_complex(bins, addtion0):
     '''
     调用Contrast模块FFDSum_complex方法进行初始放置计算；
     再使用本模块detect_hm_indepence方法进行HM Node独立性调整与修复
     '''
-    after_bins, used_time = Contrast.FFDSum_complex(bins, addtion0)
-    after_bins = detect_hm_independce(after_bins, max_suffix, total_addtion, addtion0)
+    after_bins, used_time = Contrast.FFDSum_simple(bins, addtion0)
+    after_bins = detect_vm_independce(after_bins, max_suffix, addtion0)
     return after_bins
+    return bins
 
 def compute_costs(bins, size=1):
     '''
@@ -381,18 +372,18 @@ def compute_costs(bins, size=1):
         pass
     return cost['degree_of_concentration']
 
-def main_controller(function_str, bins, addtion0, func_handler, p_crash, max_suffix, total_addtion, map_d_s, return_dict):
+def main_controller(function_str, bins, addtion0, func_handler, p_crash, max_suffix, max_service_suffix, map_d_s, return_dict):
     '''
     2017-12-20 23:00 使用多进程共享变量与多进程实现2种方式并行计算
-    function_str用于标识哪个方法0=safe_FFDSum_simple 1=safe_FFDSum_complex 2=safe_FFDSum_simple 3=safe_FFDSum_complex
+    function_str用于标识哪个方法0=safe_FFDSum_simple 1=safe_FFDSum_complex
     使用函数句柄实现不同方法的串行计算逻辑
     '''
     # 初始放置方案的计算
-    after_bins = func_handler(bins, total_addtion, addtion0)
-    # map_d_s = docker2service(bins, map_d_s, max_service_suffix, addtion0)
+    after_bins = func_handler(bins, addtion0)
+    map_d_s = docker2service(bins, map_d_s, max_service_suffix, addtion0)
     # 该方案的目标优化结果
     utilization = compute_costs(after_bins)
-    tolerance, crash_hms, crash_services = simulate_crash_HM(p_crash, max_suffix, after_bins, total_addtion, map_d_s)
+    tolerance, crash_hms, crash_services = simulate_crash_HM(p_crash, max_suffix, bins, addtion0, map_d_s)
     return_dict[function_str] = [utilization, tolerance, len(crash_hms)]
     return return_dict
 
@@ -417,7 +408,7 @@ if __name__=='__main__':
     '''
     模拟从集群初始化到批量新增,每增加一批新容器的宕机概率
     '''
-    # 1. 程序初始设定
+        # 1. 程序初始设定
     # 多进程初始化
     # p = multiprocessing.Pool()
     manager = multiprocessing.Manager()
@@ -425,9 +416,8 @@ if __name__=='__main__':
     # main_init(50, 1.0)进行的最初初始化
     p_crash = 0.1
     max_suffix = 49
-    max_service_suffix = -1
     # 重复次数(重复几次就用几个并行进程)
-    Gen = 4
+    Gen = 2
     # 用于生成记录容错能力的json的数据
     data = {
         'scale':[],
@@ -436,95 +426,74 @@ if __name__=='__main__':
         'safe_simple':[],
         'safe_complex':[]
     }
+    map_d_s = [-1] * (max_suffix + 1)
         
 
     # 2. 产生新初始集群与新增容器的服务数量,创建多个初始数据集,便于多进程
-    init_popu0 = main_init(max_suffix+1, 1.0) # safe_FFDSum_simple
-    init_popu1 = copy.deepcopy(init_popu0)    # safe_FFDSum_complex
-    init_popu2 = copy.deepcopy(init_popu1)    # safe_FFDSum_simple
-    init_popu3 = copy.deepcopy(init_popu2)    # safe_FFDSum_complex
-    map_d_s0 = [-1] * (max_suffix + 1)  # 记录所有addtion0引起的docker-service映射
-    map_d_s1 = [-1] * (max_suffix + 1)  # 记录所有addtion1引起的docker-service映射
-    total_addtion0 = []  # 记录所有addtion0创造的service映射
-    total_addtion1 = []  # 记录所有addtion1创造的service映射
+    init_popu0 = main_init(max_suffix+1, 1.0)
+    init_popu1 = copy.deepcopy(init_popu0)
     cycle = []
-    for i in xrange(1, 2):
+    for i in xrange(1, 6):
         a = 10 ** i
-        ll = sorted(random.sample(range(1,10), 3))
+        ll = sorted(random.sample(range(1,10), 4))
         for j in ll:
             cycle.append(j*a)
 
     # 3. 模拟多批量新增场景
     for scale in cycle:
+        max_service_suffix = -1
         avg_simple = [0, 0, 0]
         avg_complex = [0, 0, 0]
         avg_safe_simple = [0, 0, 0]
         avg_safe_complex = [0, 0, 0]
 
-        # 创建2种新增批量并维护2种集群docker2service映射,分别给2个进程独立计算
-        # 由于容器与服务的映射关系仅与addtion['replicas']有关系，因此整个程序中仅循环创建addtion，故只需在次创建map_d_s即可
+        # 创建2种新增批量,分别给2个进程独立计算
         addtion0 = create_addtion(1.0, scale)
         addtion1 = create_addtion(1.0, scale)
-        map_d_s0 = docker2service(map_d_s0, max_service_suffix, addtion0)
-        map_d_s1 = docker2service(map_d_s1, max_service_suffix, addtion1)
-        total_addtion0 += addtion0['replicas'] # 记录所有循环中addtion0的replicas
-        total_addtion1 += addtion1['replicas'] # 记录所有循环中addtion1的replicas
         avg_scale = 2 * len(init_popu0['c_rp']) + sum(addtion0['replicas']) + sum(addtion1['replicas'])
+
         # 设置多进程间共享变量
         return_dict = manager.dict()
-        
         # 运行gen个进程进行分别计算求均值
         for gen in xrange(Gen):
             if gen == 0:
-                # safe_FFDSum_simple
-                p = multiprocessing.Process(target=main_controller, args=(0, init_popu0, addtion0, safe_FFDSum_simple, p_crash, max_suffix, total_addtion0, map_d_s0, return_dict))
+                p = multiprocessing.Process(target=main_controller, args=(0, init_popu0, addtion0, safe_FFDSum_simple, p_crash, max_suffix, max_service_suffix, map_d_s, return_dict))
                 jobs.append(p)
                 p.start()
-            # elif gen == 1:
-            #     # safe_FFDSum_complex
-            #     p = multiprocessing.Process(target=main_controller, args=(1, init_popu1, addtion0, safe_FFDSum_complex, p_crash, max_suffix, total_addtion0, map_d_s0, return_dict))
-            #     jobs.append(p)
-            #     p.start()
-            # elif gen == 2:
-            #     # safe_FFDSum_simple
-            #     p = multiprocessing.Process(target=main_controller, args=(2, init_popu2, addtion1, safe_FFDSum_simple, p_crash, max_suffix, total_addtion1, map_d_s1, return_dict))
-            #     jobs.append(p)
-            #     p.start()
-            # elif gen == 3:
-            #     # safe_FFDSum_complex
-            #     p = multiprocessing.Process(target=main_controller, args=(3, init_popu3, addtion1, safe_FFDSum_complex, p_crash, max_suffix, total_addtion1, map_d_s1, return_dict))
-            #     jobs.append(p)
-            #     p.start()
+            elif gen == 1:
+                p = multiprocessing.Process(target=main_controller, args=(1, init_popu1, addtion1, safe_FFDSum_complex, p_crash, max_suffix, max_service_suffix, map_d_s, return_dict))
+                jobs.append(p)
+                p.start()
 
         for proc in jobs:
             proc.join()
 
+        # print return_dict.values()
+        avg_safe_simple[0] += return_dict[0][0]
+        avg_safe_simple[1] += return_dict[0][1]
+        avg_safe_simple[2] += return_dict[0][2]
+        avg_safe_complex[0] += return_dict[1][0]
+        avg_safe_complex[1] += return_dict[1][1]
+        avg_safe_complex[2] += return_dict[1][2]
+        avg_simple = 0
+        avg_complex = 0
+        
+        # 更新最大服务下标\上次检查过容错性的容器最大下标
+        max_service_suffix += scale
         # 计算迭代gen代的平均值,并写入文件
-    #     avg_safe_simple[0] += (return_dict[0][0] + return_dict[2][0])
-    #     avg_safe_simple[1] += (return_dict[0][1] + return_dict[2][1])
-    #     avg_safe_simple[2] += (return_dict[0][2] + return_dict[2][2])
-    #     avg_safe_complex[0] += (return_dict[1][0] + return_dict[3][0])
-    #     avg_safe_complex[1] += (return_dict[1][1] + return_dict[3][1])
-    #     avg_safe_complex[2] += (return_dict[1][2] + return_dict[3][2])
-    #     avg_simple = 0
-    #     avg_complex = 0
-        
-    #     # 更新最大服务下标\上次检查过容错性的容器最大下标
-    #     max_service_suffix += scale
-    #     # 计算迭代gen代的平均值,并写入文件
-    #     avg_scale /= Gen/2
-    #     avg_safe_simple[0] /= Gen/2
-    #     avg_safe_simple[1] /= Gen/2
-    #     avg_safe_simple[2] /= Gen/2
-    #     avg_safe_complex[0] /= Gen/2
-    #     avg_safe_complex[1] /= Gen/2
-    #     avg_safe_complex[2] /= Gen/2
-    #     data = createJSON(data, avg_scale, avg_simple, avg_complex, avg_safe_simple, avg_safe_complex)
+        avg_scale /= Gen
+        avg_safe_simple[0] /= Gen
+        avg_safe_simple[1] /= Gen
+        avg_safe_simple[2] /= Gen
+        avg_safe_complex[0] /= Gen
+        avg_safe_complex[1] /= Gen
+        avg_safe_complex[2] /= Gen
+        data = createJSON(data, avg_scale, avg_simple, avg_complex, avg_safe_simple, avg_safe_complex)
   
-    # # # 4. 记录data用于前端数据可视化
-    # with open('.//viz//contrast-addtion-{}-demo.json'.format(datetime.datetime.now()),'w') as f:
-    #     f.flush()
-    #     json.dump(data, f, indent=2)
+    # # 4. 记录data用于前端数据可视化
+    with open('.//viz//contrast-addtion-{}-demo.json'.format(datetime.datetime.now()),'w') as f:
+        f.flush()
+        json.dump(data, f, indent=2)
 
 
 
@@ -539,108 +508,3 @@ if __name__=='__main__':
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    # # 1. 程序初始设定
-    # # 多进程初始化
-    # # p = multiprocessing.Pool()
-    # manager = multiprocessing.Manager()
-    # jobs = []
-    # # main_init(50, 1.0)进行的最初初始化
-    # p_crash = 0.1
-    # max_suffix = 49
-    # # 重复次数
-    # Gen = 1
-    # # 用于生成记录容错能力的json的数据
-    # data = {
-    #     'scale':[],
-    #     'simple':[],
-    #     'complex':[],
-    #     'safe_simple':[],
-    #     'safe_complex':[]
-    # }
-    # map_d_s = [-1] * (max_suffix + 1)
-        
-
-    # # 2. 产生新初始集群与新增容器的服务数量
-    # init_popu0 = main_init(max_suffix+1, 1.0)
-    # init_popu1 = copy.deepcopy(init_popu0)
-    # cycle = []
-    # for i in xrange(1, 3):
-    #     a = 10 ** i
-    #     ll = sorted(random.sample(range(1,10), 4))
-    #     for j in ll:
-    #         cycle.append(j*a)
-
-    # # 3. 模拟多批量新增场景
-    # for scale in cycle:
-    #     max_service_suffix = -1
-    #     avg_scale = 0
-    #     avg_simple = [0, 0, 0]
-    #     avg_complex = [0, 0, 0]
-    #     avg_safe_simple = [0, 0, 0]
-    #     avg_safe_complex = [0, 0, 0]
-
-    #     # 运行10次，取效果最好者
-    #     for gen in xrange(Gen):
-    #         # 记录初始集群信息并深度拷贝多副本用于算法间对比
-    #         addtion0 = create_addtion(1.0, scale)
-    #         avg_scale += len(init_popu0['c_rp']) + sum(addtion0['replicas'])
-
-    #         # 对初始集群的多副本进行不同放置决策并计算优化模型结果
-    #         #[x.get() for x in [pool.apply_async(pool_test, (x,)) for x in gen_list(l)]]
-    #         return_dict = manager.dict()
-    #         p = multiprocessing.Process(target=main_controller, args=(0, init_popu0, addtion0, safe_FFDSum_simple, p_crash, max_suffix, max_service_suffix, map_d_s, return_dict))
-    #         jobs.append(p)
-    #         p.start()
-    #         p = multiprocessing.Process(target=main_controller, args=(1, init_popu1, addtion0, safe_FFDSum_complex, p_crash, max_suffix, max_service_suffix, map_d_s, return_dict))
-    #         jobs.append(p)
-    #         p.start()
-
-    #         # print p.map(main_controller, (init_popu0, init_popu1), (addtion0, addtion0), (FFDSum_simple, FFDSum_complex))
-
-    #         for proc in jobs:
-    #             proc.join()
-    #         # print return_dict.values()
-    #         avg_safe_simple[0] += return_dict[0][0]
-    #         avg_safe_simple[1] += return_dict[0][1]
-    #         avg_safe_simple[2] += return_dict[0][2]
-    #         avg_safe_complex[0] += return_dict[1][0]
-    #         avg_safe_complex[1] += return_dict[1][1]
-    #         avg_safe_complex[2] += return_dict[1][2]
-    #         avg_simple = 0
-    #         avg_complex = 0
-        
-    #         # 更新最大服务下标\上次检查过容错性的容器最大下标
-    #         max_service_suffix += scale
-    #     # 计算迭代gen代的平均值,并写入文件
-    #     avg_scale /= Gen
-    #     avg_safe_simple[0] /= Gen
-    #     avg_safe_simple[1] /= Gen
-    #     avg_safe_simple[2] /= Gen
-    #     avg_safe_complex[0] /= Gen
-    #     avg_safe_complex[1] /= Gen
-    #     avg_safe_complex[2] /= Gen
-    #     data = createJSON(data, avg_scale, avg_simple, avg_complex, avg_safe_simple, avg_safe_complex)
-  
-    # # # 4. 记录data用于前端数据可视化
-    # with open('.//viz//contrast-addtion-{}-demo.json'.format(datetime.datetime.now()),'w') as f:
-    #     f.flush()
-    #     json.dump(data, f, indent=2)
