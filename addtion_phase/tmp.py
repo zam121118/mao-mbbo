@@ -7,6 +7,10 @@ import random
 import math
 import copy
 import collections
+import multiprocessing
+import datetime
+import Contrast
+from init import *
 
 
 # 其中vm_option以资源降序排列
@@ -14,8 +18,9 @@ vm_option = [(1.0, 1.0), (1.0, 0.8), (0.8, 0.7), (0.6, 0.5), (0.5, 0.4), (0.3, 0
 
 
 
-def detect_independce(bins, max_suffix, addtion0):
+def detect_hm_independce(bins, max_suffix, addtion0):
     '''
+    以HM为独立性基础
     @para: bins 经过初步算法安排的放置方案；addtion0该批新增实例服务及其replicas便于独立性检测;
            max_suffix记录上次满足服务容错（独立性的）的最大容器下标，本次检测从该下标之最大下标进行检测
     @func: 从init_server至最大，依据addtion0中各服务容器及其replicas依次检测其在bins['population']对应HM编号，
@@ -50,7 +55,7 @@ def detect_independce(bins, max_suffix, addtion0):
         used_hms.remove(service2hms[0])
         origin_vm_suffix = bins['population'][0][origin_docker_suffix][0]
         for hm in sorted(used_hms, reverse=True):
-            dockers, vms = find_docker_onHM(bins,hm)
+            dockers, vms = find_docker_onHM(bins, hm, 0)
             # 依次寻找其他HM上可与该服务第一个replica对掉而满足双方资源约束的解
             for i in xrange(len(dockers)):
                 vm_suffix = vms[i]
@@ -78,7 +83,7 @@ def detect_independce(bins, max_suffix, addtion0):
             # 否则继续寻找下一个hm
         # 若所有active HMs均无发用于修复独立性,则新建HM与VM
         if not flag:
-            vm = create_VM_random(object_CPU, object_MEM, vm_option)
+            vm = Contrast.create_VM_random(object_CPU, object_MEM, vm_option)
             vm_suffix = len(bins['v_p_cost'][0])
             hm_suffix = len(bins['h_m_cost'][0])
             bins['v_p_cost'][0].append(object_CPU)
@@ -91,39 +96,107 @@ def detect_independce(bins, max_suffix, addtion0):
             bins['population'][0][origin_docker_suffix] = [vm_suffix, hm_suffix]
             flag = True
         
-    return bins['population'][0]
+    return bins
 
-def find_docker_onHM(bins, hm):
+def detect_vm_independce(bins, max_suffix, addtion0):
     '''
+    以VM为独立性基础
+    @para: bins 经过初步算法安排的放置方案；addtion0该批新增实例服务及其replicas便于独立性检测;
+           max_suffix记录上次满足服务容错（独立性的）的最大容器下标，本次检测从该下标之最大下标进行检测
+    @func: 从init_server至最大，依据addtion0中各服务容器及其replicas依次检测其在bins['population']对应VM编号，
+            当某服务的多个replicas同时放置于一个VM，则在集群中FFD遍历其他VM,其上可与该容器尺寸者互换位置,
+            直至检查完所有的service并返回修复独立性之后的bins
+    '''
+    # 遍历所有容器service
+    for x in xrange(len(addtion0['c_rp'])):
+        # 各服务所需容器配置及replicas数量
+        object_CPU, object_MEM, i = addtion0['c_rp'][x], addtion0['c_rm'][x], addtion0['replicas'][x]
+        # 若该服务replica为1，即单节点独立; 若为0说明服务启动失败，没有实际容器放置
+        if i == 1 or i == 0:
+            continue
+        # 该服务所有replicas对应HM下标
+        dockers = service2docker(x, max_suffix, bins['population'][0], addtion0)
+        try:
+            service2vms = [bins['population'][0][j][0] for j in dockers]
+        except IndexError, e:
+            print bins['population'][0][dockers[0]]
+            print dockers
+        # 独立性检测， 若该suffix所有HM值均相同则不满足需要修复，否则满足
+        num_hms = len(set(service2vms))
+        # 若满足独立性，则进行下一个服务检测
+        if num_hms != 1:
+            continue
+
+        # 不满足独立性需要进行修复
+        flag = False           # 还未修复为False
+        # 对该服务的第一个支撑replica从active HMs最大下标者开始依次往前，寻找可与该容器对调换位置的容器
+        used_vms = bins['map_v_h'].keys()
+        used_vms.remove(service2vms[0])
+        origin_docker_suffix = dockers[0]
+        origin_vm_suffix = bins['population'][0][origin_docker_suffix][0]
+        # 依次寻找其他VM上可与该服务第一个replica对掉而满足双方资源约束的解
+        for vm in sorted(used_vms):
+            dockers = find_docker_onHM(bins, vm, 1)
+            for i in xrange(len(dockers)):
+                # 换出原docker换入replica之后的资源
+                reversed_cpu1 = bins['v_rp'][vm] - (bins['v_p_cost'][0][vm] - bins['c_rp'][i] + object_CPU)
+                reversed_mem1 = bins['v_rm'][vm] - (bins['v_m_cost'][0][vm] - bins['c_rm'][i] + object_MEM)
+                # 换入新容器换出replica后的资源
+                reversed_cpu0 = bins['v_rp'][origin_vm_suffix] - (bins['v_p_cost'][0][origin_vm_suffix] + bins['c_rp'][i] - object_CPU)
+                reversed_mem0 = bins['v_rm'][origin_vm_suffix] - (bins['v_m_cost'][0][origin_vm_suffix] + bins['c_rm'][i] - object_MEM)
+                # 若对换后满足资源约束，则更新集群
+                if reversed_cpu0 >= 0 and reversed_cpu1 >= 0 and reversed_mem0 >= 0 and reversed_mem1 >=0:
+                    bins['v_p_cost'][0][vm] += (object_CPU - bins['c_rp'][i])
+                    bins['v_m_cost'][0][vm] += (object_MEM - bins['c_rm'][i])
+                    bins['v_p_cost'][0][origin_vm_suffix] += (bins['c_rp'][i] - object_CPU)
+                    bins['v_m_cost'][0][origin_vm_suffix] += (bins['c_rm'][i] - object_MEM)
+                    bins['population'][0][origin_docker_suffix] = [vm, bins['map_v_h'][vm]]
+                    bins['population'][0][i] = [origin_vm_suffix, bins['map_v_h'][origin_vm_suffix]]
+                    # map_v_h由于是对掉并不会产生新的拓扑变化，故不用更新
+                    flag = True
+                    break
+            # 若在该hm上对换而修复，则推出本次service修复，进入下一个
+            if flag:
+                break
+            # 否则继续寻找下一个hm
+        # 若所有active HMs均无发用于修复独立性,则新建HM与VM
+        if not flag:
+            vm = Contrast.create_VM_random(object_CPU, object_MEM, vm_option)
+            vm_suffix = len(bins['v_p_cost'][0])
+            hm_suffix = len(bins['h_m_cost'][0])
+            bins['v_p_cost'][0].append(object_CPU)
+            bins['v_m_cost'][0].append(object_MEM)
+            bins['v_rp'].append(vm['rp'])
+            bins['v_rm'].append(vm['rm'])
+            bins['h_p_cost'][0].append(vm['rp'])
+            bins['h_m_cost'][0].append(vm['rm'])
+            bins['map_v_h'][vm_suffix] = hm_suffix
+            bins['population'][0][origin_docker_suffix] = [vm_suffix, hm_suffix]
+            flag = True
+        
+    return bins
+
+def find_docker_onHM(bins, vhm, label):
+    '''
+    2017-12-21 更新:  通过label表明传入的时hm下标还是vm下标
+    即控制label=0,说明查找某hm上所有docker与vm 2个list
+      控制label=1, 说明查找某vm上的所有docker
     给定集群以及active HM下标，返回该HM上承载的所有容器下标及vm下标
     '''
-    dockers, vms = [], []
+    dockers_onHM, vms_onHM, dockers_onVM = [], [], []
     for i in xrange(len(bins['c_rp'])):
         v, h = bins['population'][0][i]
-        if h == hm:
-            dockers.append(i)
-            vms.append(v)
-    return (dockers,vms)
-
-def create_VM_random(c_rp, c_rm, vm_option):
-    '''
-    从vm_option中随机挑选满足约束的VM
-    '''
-    # print "\n 进入 create_VM() 方法"
-    # 部分随机的创建任意大小能够容纳该容器的vm
-    vm = {'rp':0, 'rm':0}
-    # 这种方法总是选择最大者放入,故基本都是(1.0, 1.0)的VM
-    # for i in xrange(len(vm_option)):
-    #     if vm_option[i][0] >= c_rp and vm_option[i][1] >= c_rm:
-    #         vm['rp'], vm['rm'] = vm_option[i][0], vm_option[i][1]
-    #         break
-    # 采用随机生成方式，模拟创建的VM
-    while vm['rp'] == 0:
-        i = random.randint(0, len(vm_option)-1)
-        if vm_option[i][0] >= c_rp and vm_option[i][0] >= c_rm:
-            vm['rp'], vm['rm'] = vm_option[i][0], vm_option[i][1]
-            break
-    return vm
+        if label == 0:
+            if  h == vhm:
+                dockers_onHM.append(i)
+                vms_onHM.append(v)
+        elif label == 1:
+            if v == vhm:
+                dockers_onVM.append(i)
+    if label == 0:
+        return (dockers_onHM, vms_onHM)
+    elif label == 1:
+        return dockers_onVM
 
 def docker2service(bins, map_d_s, max_service_suffix, addtion0):
     '''
@@ -137,7 +210,6 @@ def docker2service(bins, map_d_s, max_service_suffix, addtion0):
             map_d_s.append(i + max_service_suffix + 1)
             x -= 1
     return map_d_s
-
 
 def service2docker(service_suffix, max_suffix, population, addtion0):
     '''
@@ -195,7 +267,7 @@ def deprated_docker2service(docker_suffix, max_suffix, population, addtion0):
 def simulate_crash_HM(p_crash, max_suffix, bins, addtion0, map_d_s):
     '''
     2017-12-20 22:00 更新：
-                为了保证计算公平性，应使用宕机概率提前选出预备宕机HMs，再进行容错计算
+        为了保证计算公平性，应使用宕机概率提前选出预备宕机HMs，再进行容错计算
     通过HMs被宕机概率选中来模拟集群HMs宕机现象，并计算因这些机器crash而造成的服务终止问题，使用容错力衡量公式进行计算
     tolerance = a*N_severity+b*N_medium+c*N_mild, a，b, c分别取10,3,1
     '''
@@ -210,7 +282,7 @@ def simulate_crash_HM(p_crash, max_suffix, bins, addtion0, map_d_s):
             print '第 {} hm将被摧毁'.format(h)
             crash_hms.append(h)
             print "开始查找该hm上的容器"
-            dockers, vms = find_docker_onHM(bins, h)
+            dockers, vms = find_docker_onHM(bins, h, 0)
             print "结束查找该hm上的容器"
             # 遍历dockers
             for d in dockers:
@@ -239,48 +311,300 @@ def simulate_crash_HM(p_crash, max_suffix, bins, addtion0, map_d_s):
     tolerance = 10 * N_severity + 3 * N_medium + N_mild
     return tolerance,crash_hms,crash_services
 
+def safe_FFDSum_simple(bins, addtion0):
+    '''
+    调用Contrast模块FFDSum_simple方法进行初始放置计算；
+    再使用本模块detect_vm_indepence方法进行VM Node独立性调整与修复
+    '''
+    after_bins, used_time = Contrast.FFDSum_simple(bins, addtion0)
+    after_bins = detect_vm_independce(after_bins, max_suffix, addtion0)
+    return after_bins
+
+def safe_FFDSum_complex(bins, addtion0):
+    '''
+    调用Contrast模块FFDSum_complex方法进行初始放置计算；
+    再使用本模块detect_hm_indepence方法进行HM Node独立性调整与修复
+    '''
+    after_bins, used_time = Contrast.FFDSum_simple(bins, addtion0)
+    after_bins = detect_vm_independce(after_bins, max_suffix, addtion0)
+    return after_bins
+    return bins
+
+def compute_costs(bins, size=1):
+    '''
+    优化目标，新增场景提高各节点实际物理资源利用率，即集群中剩余资源利用率最大，减少碎片化资源
+    再加容错能力
+    '''   
+
+    # First, 构造代价变量，计算实际running VMs HMs
+    cost = {
+        'degree_of_concentration': 0.0,
+        'power_cost': 0.0,
+        'used_hms': 0,
+        }
+    map_v_h = bins['map_v_h']
+    map_h_v = Contrast.map_h2v(bins)
+    used_hms = list(set(map_v_h.values()))
+    
+    # Then, 对bins中前size个方案计算代价值（在新增算法中，size只有0一种值）
+    for i in xrange(size):
+        utilization = 0
+        # 计算总能耗及各running VM/HM负载均衡指数
+        tmp1 = len(used_hms)
+        cost['used_hms'] = tmp1
+        while tmp1 > 0:
+            h = used_hms[tmp1 - 1]   
+            # 以docker作为实际负载进行代价计算
+            true_load_cpu = sum([bins['v_p_cost'][i][v] for v in map_h_v[h]])
+            true_load_mem = sum([bins['v_m_cost'][i][v] for v in map_h_v[h]])
+            # 计算集群剩余资源量即各HM节点cpu、mem余量之乘积，所有active HM求和
+            utilization += (1.0 - true_load_cpu) * (1.0 - true_load_mem)
+            cost['power_cost'] += 446.7 + 5.28*true_load_cpu - 0.04747*true_load_cpu**2 + 0.000334*true_load_cpu**3
+            tmp1 -= 1
+        cost['degree_of_concentration'] = 100 * cost['used_hms'] - 13 * utilization
+
+        # 计算VM迁移时间（仅聚合阶段）
+        pass
+    return cost['degree_of_concentration']
+
+def main_controller(function_str, bins, addtion0, func_handler, p_crash, max_suffix, max_service_suffix, map_d_s, return_dict):
+    '''
+    2017-12-20 23:00 使用多进程共享变量与多进程实现2种方式并行计算
+    function_str用于标识哪个方法0=safe_FFDSum_simple 1=safe_FFDSum_complex
+    使用函数句柄实现不同方法的串行计算逻辑
+    '''
+    # 初始放置方案的计算
+    after_bins = func_handler(bins, addtion0)
+    map_d_s = docker2service(bins, map_d_s, max_service_suffix, addtion0)
+    # 该方案的目标优化结果
+    utilization = compute_costs(after_bins)
+    tolerance, crash_hms, crash_services = simulate_crash_HM(p_crash, max_suffix, bins, addtion0, map_d_s)
+    return_dict[function_str] = [utilization, tolerance, len(crash_hms)]
+    return return_dict
+
+
+def createJSON(data, addtion_scale, cost0, cost1, cost2=0, cost3=0):
+    '''
+    goal: 构造符合Echarts平行坐标图的json数据,并覆盖写入file_name文件
+    params: cost0 - 4 分别为FFDsum_simple、FFDSum_complex、safe_FFDSum_simple、safe_FFDSum_complex的代价结果
+    '''
+
+    # 构造填入各个算法列表的序列，该顺序必须严格按照平行坐标顺序：
+    # FFDsum_simple、FFDSum_complex、safe_FFDSum_simple、safe_FFDSum_complex
+    data['scale'].append(addtion_scale)
+    data['simple'].append(cost0)
+    data['complex'].append(cost1)
+    data['safe_simple'].append(cost2)
+    data['safe_complex'].append(cost3)
+    return data
+
+
 if __name__=='__main__':
     '''
+    模拟从集群初始化到批量新增,每增加一批新容器的宕机概率
     '''
+        # 1. 程序初始设定
+    # 多进程初始化
+    # p = multiprocessing.Pool()
+    manager = multiprocessing.Manager()
+    jobs = []
     # main_init(50, 1.0)进行的最初初始化
+    p_crash = 0.1
     max_suffix = 49
-
-    # 经过FFDSum_complex()将addtion0放入集群
-    bins = {
-        'h_m_cost': [[0.8, 0.5, 1.0, 0.7, 0.8, 0.8, 1.0, 0, 0.8, 0.5, 0.8, 0.8, 0.8, 0, 0.8, 0, 0.7, 0.7, 1.0, 0.8, 0.8, 0, 0.8999999999999999, 0.5, 0.8, 1.0, 0.7, 1.0, 0, 0, 0.8, 0, 0.5, 0.7, 0.8, 0, 0, 0.8, 0, 0.5, 0, 0.7, 0.7, 0, 0.7, 1.0, 0, 0, 0, 0.3, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]],
-        'population': [[[36, 8], [12, 37], [41, 27], [28, 45], [28, 45], [24, 5], [14, 42], [41, 27], [3, 25], [27, 34], [10, 39], [36, 8], [21, 17], [42, 2], [42, 2], [3, 25], [13, 18], [1, 49], [48, 6], [36, 8], [47, 0], [20, 11], [7, 24], [28, 45], [4, 4], [0, 20], [40, 10], [7, 24], [32, 3], [29, 22], [25, 33], [8, 19], [3, 25], [15, 16], [9, 30], [3, 25], [38, 41], [45, 23], [18, 1], [9, 30], [11, 9], [2, 5], [17, 32], [9, 30], [23, 12], [35, 44], [15, 16], [43, 26], [30, 14], [12, 37], [36, 8], [11, 9], [14, 42], [10, 39], [12, 37], [23, 12], [38, 41], [35, 44], [43, 26], [25, 33], [7, 24], [7, 24], [9, 30], [21, 17], [21, 17], [29, 22], [30, 14], [41, 27], [41, 27], [24, 5], [45, 23], [18, 1], [32, 3], [48, 6], [48, 6], [20, 11], [41, 27], [48, 6], [9, 30], [35, 44], [21, 17], [43, 26], [25, 33], [23, 12], [2, 5], [47, 0], [13, 18], [50, 50], [50, 50], [50, 50], [20, 11], [51, 4], [52, 51], [52, 51], [53, 52], [14, 42], [53, 52], [54, 53], [54, 53], [55, 54], [55, 54], [32, 3], [47, 0], [13, 18], [56, 16], [57, 22], [58, 55], [58, 55], [59, 56], [59, 56], [60, 57], [42, 2], [60, 57], [60, 57], [60, 57], [53, 52], [47, 0], [61, 14], [62, 34], [63, 19], [64, 10], [65, 20], [66, 22], [67, 58], [67, 58], [68, 59]]],
-        'c_rp': [0.08829029262312188, 0.06560861376632443, 0.0015457954053844647, 0.4347188078765689, 0.3703255469292323, 0.09070899555840195, 0.4726977822302246, 0.2276411505148057, 0.45202142487452196, 0.2500932427004002, 0.3005210521115892, 0.3607372531069386, 0.2889777541909554, 0.4128021150334051, 0.4922987167674732, 0.08752874030548641, 0.019589737160099263, 0.10419150329464688, 0.23344707908309847, 0.2788695485183376, 0.1277329784627293, 0.1480368160358554, 0.1199371682763718, 0.17503265971594423, 0.4767759861583009, 0.33361669193606225, 0.2654082548140256, 0.2600417391863651, 0.22063329506261153, 0.1037324099359716, 0.3336816884750865, 0.30133630630953717, 0.32764837776364414, 0.03823590703568963, 0.062207068327759574, 0.015669231622944646, 0.47301045754878707, 0.06156305758552805, 0.07737416884298154, 0.3018437447493236, 0.40769762497295825, 0.04312445321763786, 0.4672719359691182, 0.044515120475888514, 0.40075750544081157, 0.3365609573618048, 0.00819921905549631, 0.3500641806988608, 0.1998620225593259, 0.48698013514862754, 0.18652567130939746, 0.18652567130939746, 0.18652567130939746, 0.18652567130939746, 0.32025742189563455, 0.11222603498439226, 0.25867165026065503, 0.25867165026065503, 0.25867165026065503, 0.25867165026065503, 0.25867165026065503, 0.22738995770257686, 0.22738995770257686, 0.22738995770257686, 0.046579359545904975, 0.046579359545904975, 0.046579359545904975, 0.046579359545904975, 0.39520385563835364, 0.39520385563835364, 0.39520385563835364, 0.39520385563835364, 0.3771656866908263, 0.3771656866908263, 0.20320570401495747, 0.20320570401495747, 0.17515013724976608, 0.17515013724976608, 0.17515013724976608, 0.17515013724976608, 0.17515013724976608, 0.15984585914133032, 0.15984585914133032, 0.15984585914133032, 0.15984585914133032, 0.44727124527430034, 0.44727124527430034, 0.44727124527430034, 0.44727124527430034, 0.04769142257217346, 0.2954666964904553, 0.2954666964904553, 0.4163168214049797, 0.4163168214049797, 0.4163168214049797, 0.1037626195425822, 0.30850228151957304, 0.30850228151957304, 0.30850228151957304, 0.30850228151957304, 0.30850228151957304, 0.14199399159603598, 0.14199399159603598, 0.14199399159603598, 0.14199399159603598, 0.14199399159603598, 0.4221712393453144, 0.4221712393453144, 0.4221712393453144, 0.4221712393453144, 0.4221712393453144, 0.033172286146503194, 0.033172286146503194, 0.033172286146503194, 0.033172286146503194, 0.17122689172793726, 0.17122689172793726, 0.21547337115824328, 0.21547337115824328, 0.29464637834860097, 0.29464637834860097, 0.29464637834860097, 0.29464637834860097, 0.3899181715551882, 0.3899181715551882, 0.3899181715551882],
-        'v_rm': [0.5, 0.3, 0.3, 1.0, 0.4, 0.3, 0.5, 0.8, 0.5, 0.8, 0.5, 0.5, 0.8, 1.0, 0.7, 0.4, 0.3, 0.5, 0.5, 0.4, 0.8, 0.7, 0.7, 0.8, 0.5, 0.7, 0.7, 0.5, 1.0, 0.3, 0.5, 0.7, 0.7, 0.8, 1.0, 0.7, 0.8, 1.0, 0.7, 1.0, 0.5, 1.0, 1.0, 0.7, 0.8, 0.5, 0.8, 0.8, 1.0, 1.0, 1.0, 0.4, 1.0, 1.0, 1.0, 1.0, 0.3, 0.3, 1.0, 1.0, 1.0, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 1.0, 1.0], 
-        'v_m_cost': [[0.4002595267800804, 0.21834330897226126, 0.2794000738638732, 0.974216928903011, 0.2577478334035769, 0, 0, 0.6916725826261605, 0.40012444265962405, 0.7802692421943481, 0.4577867881591793, 0.40482828087268835, 0.6548327418361087, 0.8489672973622283, 0.6668627806828791, 0.36444129415394755, 0, 0.4032162652549989, 0.41090499953553705, 0, 0.775302494592772, 0.6487141609855507, 0, 0.7829527190782306, 0.3704059372902361, 0.6455413984726108, 0, 0.41567367861592, 0.7948970753226514, 0.2817946582960997, 0.4026504963811578, 0, 0.5891370478862283, 0, 0, 0.6192450594442979, 0.7398452498680914, 0, 0.5185996735580709, 0, 0.43729069625834494, 0.9397762170396564, 0.9965033722285126, 0.6487657613815532, 0, 0.4584077508214668, 0, 0.7604841044270456, 0.7164572998059926, 0, 0.9426212927115777, 0.36071186153020895, 0.8600865015854542, 0.9016298517849399, 0.8477827098142829, 0.8477827098142829, 0.20950017211174232, 0.20950017211174232, 0.8991773694434426, 0.8991773694434426, 0.9997830398536384, 0.1864651864637457, 0.1864651864637457, 0.29634553952208026, 0.29634553952208026, 0.29634553952208026, 0.29634553952208026, 0.8560467857685767, 0.42802339288428837]], 
-        'map_v_h': {0: 20, 1: 49, 2: 5, 3: 25, 4: 4, 7: 24, 8: 19, 9: 30, 10: 39, 11: 9, 12: 37, 13: 18, 14: 42, 15: 16, 17: 32, 18: 1, 20: 11, 21: 17, 23: 12, 24: 5, 25: 33, 27: 34, 28: 45, 29: 22, 30: 14, 32: 3, 35: 44, 36: 8, 38: 41, 40: 10, 41: 27, 42: 2, 43: 26, 45: 23, 47: 0, 48: 6, 50: 50, 51: 4, 52: 51, 53: 52, 54: 53, 55: 54, 56: 16, 57: 22, 58: 55, 59: 56, 60: 57, 61: 14, 62: 34, 63: 19, 64: 10, 65: 20, 66: 22, 67: 58, 68: 59},
-        'c_rm': [0.07626093695987968, 0.10455062999738285, 0.17604020720702696, 0.364870510177424, 0.3450611994785159, 0.09652447647292164, 0.4891221354386861, 0.24931728428806665, 0.3730643484983662, 0.41567367861592, 0.45002784223206066, 0.27657936586538245, 0.30165893621023376, 0.38210961354474704, 0.4309956403064598, 0.10618887706397467, 0.21365721146145716, 0.21834330897226126, 0.17455849361511475, 0.3792460011157106, 0.07747877244120305, 0.17019026655366057, 0.02747656954656283, 0.08496536566671159, 0.2577478334035769, 0.4002595267800804, 0.43729069625834494, 0.30754408850628423, 0.10534268478691836, 0.0644616422632592, 0.32517728919069605, 0.40012444265962405, 0.49177601705457386, 0.2358139734616441, 0.18508307386126083, 0.003187686286096364, 0.268465709032826, 0.18452629000415235, 0.1370235387182226, 0.25831703163702546, 0.39706933494556973, 0.20916992910720333, 0.4032162652549989, 0.20714692795358527, 0.4807872680927987, 0.3459068462246452, 0.12862732069230345, 0.3284016520996384, 0.18531748034831735, 0.25731600986511605, 0.007758945927118621, 0.007758945927118621, 0.007758945927118621, 0.007758945927118621, 0.29296610197360984, 0.23193530622876202, 0.2501339645252449, 0.2501339645252449, 0.2501339645252449, 0.2501339645252449, 0.2501339645252449, 0.10651796004806863, 0.10651796004806863, 0.10651796004806863, 0.21733301603284047, 0.21733301603284047, 0.21733301603284047, 0.21733301603284047, 0.27388146081731446, 0.27388146081731446, 0.27388146081731446, 0.27388146081731446, 0.27429419098756763, 0.27429419098756763, 0.24440036650890243, 0.24440036650890243, 0.02320424869440782, 0.02320424869440782, 0.02320424869440782, 0.02320424869440782, 0.02320424869440782, 0.07023014475666992, 0.07023014475666992, 0.07023014475666992, 0.07023014475666992, 0.4258099137890289, 0.4258099137890289, 0.4258099137890289, 0.4258099137890289, 0.0910014651335199, 0.36071186153020895, 0.36071186153020895, 0.4300432507927271, 0.4300432507927271, 0.4300432507927271, 0.1699816993170743, 0.42389135490714147, 0.42389135490714147, 0.42389135490714147, 0.42389135490714147, 0.42389135490714147, 0.20950017211174232, 0.20950017211174232, 0.20950017211174232, 0.20950017211174232, 0.20950017211174232, 0.4495886847217213, 0.4495886847217213, 0.4495886847217213, 0.4495886847217213, 0.4495886847217213, 0.18339811837730566, 0.18339811837730566, 0.18339811837730566, 0.18339811837730566, 0.04769524608507139, 0.04769524608507139, 0.1864651864637457, 0.1864651864637457, 0.29634553952208026, 0.29634553952208026, 0.29634553952208026, 0.29634553952208026, 0.42802339288428837, 0.42802339288428837, 0.42802339288428837],
-        'v_rp': [0.6, 0.3, 0.3, 1.0, 0.5, 0.3, 0.6, 1.0, 0.6, 1.0, 0.6, 0.6, 1.0, 1.0, 0.8, 0.5, 0.3, 0.6, 0.6, 0.5, 1.0, 0.8, 0.8, 1.0, 0.6, 0.8, 0.8, 0.6, 1.0, 0.3, 0.6, 0.8, 0.8, 1.0, 1.0, 0.8, 1.0, 1.0, 0.8, 1.0, 0.6, 1.0, 1.0, 0.8, 1.0, 0.6, 1.0, 1.0, 1.0, 1.0, 1.0, 0.5, 1.0, 1.0, 1.0, 1.0, 0.3, 0.3, 1.0, 1.0, 1.0, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 1.0, 1.0], 
-        'v_p_cost': [[0.33361669193606225, 0.10419150329464688, 0.20297031235896817, 0.882867774566597, 0.4767759861583009, 0, 0, 0.8660405154259687, 0.30133630630953717, 0.8111060285053147, 0.48704672342098665, 0.5942232962823557, 0.8728461708105865, 0.6088549740304356, 0.7629860730822042, 0.04643512609118594, 0, 0.4672719359691182, 0.4725780244813352, 0, 0.6467092165412682, 0.7380972086892033, 0, 0.6728293995665342, 0.4859128511967556, 0.7521991978770719, 0, 0.2500932427004002, 0.9800770145217454, 0.15031176948187658, 0.24644138210523087, 0, 0.7397929733494738, 0, 0, 0.770382744872226, 0.9144227655577956, 0, 0.7316821078094421, 0, 0.2654082548140256, 0.8461202983542149, 0.9382731179473816, 0.7685816901008462, 0, 0.4567669132238817, 0, 0.8882251070610029, 0.9889686070386483, 0, 0.9422339131207742, 0.2954666964904553, 0.8326336428099594, 0.89604599465249, 0.6170045630391461, 0.6170045630391461, 0.14199399159603598, 0.14199399159603598, 0.8443424786906288, 0.8443424786906288, 0.521688097784824, 0.21547337115824328, 0.21547337115824328, 0.29464637834860097, 0.29464637834860097, 0.29464637834860097, 0.29464637834860097, 0.7798363431103764, 0.3899181715551882]], 
-        'h_p_cost': [[1.0, 0.6, 1.0, 0.8, 1.0, 0.8999999999999999, 1.0, 0, 1.0, 0.6, 0.8999999999999999, 1.0, 1.0, 0, 0.8999999999999999, 0, 0.8, 0.8, 1.0, 0.8999999999999999, 0.8999999999999999, 0, 0.8999999999999999, 0.6, 1.0, 1.0, 0.8, 1.0, 0, 0, 1.0, 0, 0.6, 0.8, 0.8999999999999999, 0, 0, 1.0, 0, 0.6, 0, 0.8, 0.8, 0, 0.8, 1.0, 0, 0, 0, 0.3, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]]
-        }
-
-    addtion0={
-        'c_rm': [0.007758945927118621, 0.29296610197360984, 0.23193530622876202, 0.2501339645252449, 0.26784997128684923, 0.16788536739111945, 0.10651796004806863, 0.21733301603284047, 0.06884837068386057, 0.27388146081731446, 0.36019516976346355, 0.27429419098756763, 0.24440036650890243, 0.02320424869440782, 0.07023014475666992, 0.4258099137890289, 0.0910014651335199, 0.36071186153020895, 0.4300432507927271, 0.1699816993170743, 0.42389135490714147, 0.20950017211174232, 0.4495886847217213, 0.15617438640321674, 0.18339811837730566, 0.1580670810313438, 0.04769524608507139, 0.1864651864637457, 0.29634553952208026, 0.42802339288428837],
-        'c_rp': [0.18652567130939746, 0.32025742189563455, 0.11222603498439226, 0.25867165026065503, 0.34216900771296, 0.15934718711127366, 0.22738995770257686, 0.046579359545904975, 0.1717159564585286, 0.39520385563835364, 0.44897714725898175, 0.3771656866908263, 0.20320570401495747, 0.17515013724976608, 0.15984585914133032, 0.44727124527430034, 0.04769142257217346, 0.2954666964904553, 0.4163168214049797, 0.1037626195425822, 0.30850228151957304, 0.14199399159603598, 0.4221712393453144, 0.21752758674379558, 0.033172286146503194, 0.1670738351285147, 0.17122689172793726, 0.21547337115824328, 0.29464637834860097, 0.3899181715551882],
-        'replicas': [4, 1, 1, 5, 0, 0, 3, 4, 0, 4, 0, 2, 2, 5, 4, 4, 1, 2, 3, 1, 5, 5, 5, 0, 4, 0, 2, 2, 4, 3]
-        }
-    # 
+    # 重复次数(重复几次就用几个并行进程)
+    Gen = 2
+    # 用于生成记录容错能力的json的数据
+    data = {
+        'scale':[],
+        'simple':[],
+        'complex':[],
+        'safe_simple':[],
+        'safe_complex':[]
+    }
     map_d_s = [-1] * (max_suffix + 1)
-    map_d_s = docker2service(bins, map_d_s, -1, addtion0)  # -1
-    print map_d_s
-    origin_popu = copy.deepcopy(bins['population'][0])
-    # 未进行修复之前进行容错能力计算
-    tolerance0, crash_hms0, crash_services0 = simulate_crash_HM(0.1, max_suffix, bins, addtion0, map_d_s)
-    # 独立性检测与修复
-    popu = detect_independce(bins, max_suffix, addtion0)
-    # 容错力计算
-    tolerance, crash_hms, crash_services = simulate_crash_HM(0.1, max_suffix, bins, addtion0, map_d_s)
-    s0 =  'origin_popu = {}\n\nnew_popu = {}\n'.format(origin_popu, popu)
-    s1 = '\n旧方案容错指数 = {}，old_crash_hms ={}， crash_services = {}\n 新方案的容错能力指数 = {}, crash_hms = {}, crash_services = {}'.format(tolerance0, crash_hms0, crash_services0, tolerance, crash_hms, crash_services)
-    print s0,'\n',s1
+        
 
-    with open('addtion_phase//tmp.py','a') as f:
+    # 2. 产生新初始集群与新增容器的服务数量,创建多个初始数据集,便于多进程
+    init_popu0 = main_init(max_suffix+1, 1.0)
+    init_popu1 = copy.deepcopy(init_popu0)
+    cycle = []
+    for i in xrange(1, 6):
+        a = 10 ** i
+        ll = sorted(random.sample(range(1,10), 4))
+        for j in ll:
+            cycle.append(j*a)
+
+    # 3. 模拟多批量新增场景
+    for scale in cycle:
+        max_service_suffix = -1
+        avg_simple = [0, 0, 0]
+        avg_complex = [0, 0, 0]
+        avg_safe_simple = [0, 0, 0]
+        avg_safe_complex = [0, 0, 0]
+
+        # 创建2种新增批量,分别给2个进程独立计算
+        addtion0 = create_addtion(1.0, scale)
+        addtion1 = create_addtion(1.0, scale)
+        avg_scale = 2 * len(init_popu0['c_rp']) + sum(addtion0['replicas']) + sum(addtion1['replicas'])
+
+        # 设置多进程间共享变量
+        return_dict = manager.dict()
+        # 运行gen个进程进行分别计算求均值
+        for gen in xrange(Gen):
+            if gen == 0:
+                p = multiprocessing.Process(target=main_controller, args=(0, init_popu0, addtion0, safe_FFDSum_simple, p_crash, max_suffix, max_service_suffix, map_d_s, return_dict))
+                jobs.append(p)
+                p.start()
+            elif gen == 1:
+                p = multiprocessing.Process(target=main_controller, args=(1, init_popu1, addtion1, safe_FFDSum_complex, p_crash, max_suffix, max_service_suffix, map_d_s, return_dict))
+                jobs.append(p)
+                p.start()
+
+        for proc in jobs:
+            proc.join()
+
+        # print return_dict.values()
+        avg_safe_simple[0] += return_dict[0][0]
+        avg_safe_simple[1] += return_dict[0][1]
+        avg_safe_simple[2] += return_dict[0][2]
+        avg_safe_complex[0] += return_dict[1][0]
+        avg_safe_complex[1] += return_dict[1][1]
+        avg_safe_complex[2] += return_dict[1][2]
+        avg_simple = 0
+        avg_complex = 0
+        
+        # 更新最大服务下标\上次检查过容错性的容器最大下标
+        max_service_suffix += scale
+        # 计算迭代gen代的平均值,并写入文件
+        avg_scale /= Gen
+        avg_safe_simple[0] /= Gen
+        avg_safe_simple[1] /= Gen
+        avg_safe_simple[2] /= Gen
+        avg_safe_complex[0] /= Gen
+        avg_safe_complex[1] /= Gen
+        avg_safe_complex[2] /= Gen
+        data = createJSON(data, avg_scale, avg_simple, avg_complex, avg_safe_simple, avg_safe_complex)
+  
+    # # 4. 记录data用于前端数据可视化
+    with open('.//viz//contrast-addtion-{}-demo.json'.format(datetime.datetime.now()),'w') as f:
         f.flush()
-        f.write(s0)
-        f.write(s1)
+        json.dump(data, f, indent=2)
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    # # 1. 程序初始设定
+    # # 多进程初始化
+    # # p = multiprocessing.Pool()
+    # manager = multiprocessing.Manager()
+    # jobs = []
+    # # main_init(50, 1.0)进行的最初初始化
+    # p_crash = 0.1
+    # max_suffix = 49
+    # # 重复次数
+    # Gen = 1
+    # # 用于生成记录容错能力的json的数据
+    # data = {
+    #     'scale':[],
+    #     'simple':[],
+    #     'complex':[],
+    #     'safe_simple':[],
+    #     'safe_complex':[]
+    # }
+    # map_d_s = [-1] * (max_suffix + 1)
+        
+
+    # # 2. 产生新初始集群与新增容器的服务数量
+    # init_popu0 = main_init(max_suffix+1, 1.0)
+    # init_popu1 = copy.deepcopy(init_popu0)
+    # cycle = []
+    # for i in xrange(1, 3):
+    #     a = 10 ** i
+    #     ll = sorted(random.sample(range(1,10), 4))
+    #     for j in ll:
+    #         cycle.append(j*a)
+
+    # # 3. 模拟多批量新增场景
+    # for scale in cycle:
+    #     max_service_suffix = -1
+    #     avg_scale = 0
+    #     avg_simple = [0, 0, 0]
+    #     avg_complex = [0, 0, 0]
+    #     avg_safe_simple = [0, 0, 0]
+    #     avg_safe_complex = [0, 0, 0]
+
+    #     # 运行10次，取效果最好者
+    #     for gen in xrange(Gen):
+    #         # 记录初始集群信息并深度拷贝多副本用于算法间对比
+    #         addtion0 = create_addtion(1.0, scale)
+    #         avg_scale += len(init_popu0['c_rp']) + sum(addtion0['replicas'])
+
+    #         # 对初始集群的多副本进行不同放置决策并计算优化模型结果
+    #         #[x.get() for x in [pool.apply_async(pool_test, (x,)) for x in gen_list(l)]]
+    #         return_dict = manager.dict()
+    #         p = multiprocessing.Process(target=main_controller, args=(0, init_popu0, addtion0, safe_FFDSum_simple, p_crash, max_suffix, max_service_suffix, map_d_s, return_dict))
+    #         jobs.append(p)
+    #         p.start()
+    #         p = multiprocessing.Process(target=main_controller, args=(1, init_popu1, addtion0, safe_FFDSum_complex, p_crash, max_suffix, max_service_suffix, map_d_s, return_dict))
+    #         jobs.append(p)
+    #         p.start()
+
+    #         # print p.map(main_controller, (init_popu0, init_popu1), (addtion0, addtion0), (FFDSum_simple, FFDSum_complex))
+
+    #         for proc in jobs:
+    #             proc.join()
+    #         # print return_dict.values()
+    #         avg_safe_simple[0] += return_dict[0][0]
+    #         avg_safe_simple[1] += return_dict[0][1]
+    #         avg_safe_simple[2] += return_dict[0][2]
+    #         avg_safe_complex[0] += return_dict[1][0]
+    #         avg_safe_complex[1] += return_dict[1][1]
+    #         avg_safe_complex[2] += return_dict[1][2]
+    #         avg_simple = 0
+    #         avg_complex = 0
+        
+    #         # 更新最大服务下标\上次检查过容错性的容器最大下标
+    #         max_service_suffix += scale
+    #     # 计算迭代gen代的平均值,并写入文件
+    #     avg_scale /= Gen
+    #     avg_safe_simple[0] /= Gen
+    #     avg_safe_simple[1] /= Gen
+    #     avg_safe_simple[2] /= Gen
+    #     avg_safe_complex[0] /= Gen
+    #     avg_safe_complex[1] /= Gen
+    #     avg_safe_complex[2] /= Gen
+    #     data = createJSON(data, avg_scale, avg_simple, avg_complex, avg_safe_simple, avg_safe_complex)
+  
+    # # # 4. 记录data用于前端数据可视化
+    # with open('.//viz//contrast-addtion-{}-demo.json'.format(datetime.datetime.now()),'w') as f:
+    #     f.flush()
+    #     json.dump(data, f, indent=2)

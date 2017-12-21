@@ -7,6 +7,7 @@ Goal : 分别以docker/VM，docker/HM作为资源利用率排序准则，对比�
 Digest : 分别定义2种FFDSum算法：
       一种在新容器到来时，模拟openstack向swarm提供当前VMs尺寸，由swarm自行选择放入，若无新的VM，则由openstack新建，并返回（v,h）给容器层；
       另一种则由swarm进行全局资源的管控，以docker作为真正的负载，首先针对各个HM打分再以其上各个VM打分，若要新建VM则以打分放入；
+2017-12-20 更新: 使用多线程multiprocessing中多进行与共享变量的方式Gen次重复实验取均值
 '''
 
 
@@ -748,9 +749,8 @@ def createJSON(data, addtion_scale, cost0, cost1, cost2=0, cost3=0):
 
 def main_controller(function_str, bins, addtion0, func_handler, return_dict):
     '''
-    2017-12-20 23:00 使用多进程共享变量
-    function_str用于标识哪个方法:
-    0=FFDSum_simple 1=FFDSum_complex 2=safe_FFDSum_simple 3=safe_FFDSum_complex
+    2017-12-20 23:00 使用多进程共享变量与多进程实现4种方式并行计算
+    function_str用于标识哪个方法,0=FFDSum_simple 1=FFDSum_complex 2=safe_FFDSum_simple 3=safe_FFDSum_complex
     使用函数句柄实现不同方法的串行计算逻辑
     '''
     # 初始放置方案的计算
@@ -771,7 +771,7 @@ if __name__ == '__main__':
     jobs = []
 
     # 重复次数
-    Gen = 6
+    Gen = 3
        
     # 1. 用于生成json的数据
     data = {
@@ -789,7 +789,7 @@ if __name__ == '__main__':
     init_popu3 = copy.deepcopy(init_popu2)
 
     cycle = []
-    for i in xrange(1, 7):
+    for i in xrange(1, 3):
         a = 10 ** i
         ll = sorted(random.sample(range(1,10), 4))
         for j in ll:
