@@ -433,7 +433,7 @@ if __name__=='__main__':
     init_popu0 = main_init(max_suffix+1, 1.0)
     init_popu1 = copy.deepcopy(init_popu0)
     cycle = []
-    for i in xrange(1, 6):
+    for i in xrange(1, 2):
         a = 10 ** i
         ll = sorted(random.sample(range(1,10), 4))
         for j in ll:
