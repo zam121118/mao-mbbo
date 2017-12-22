@@ -360,7 +360,7 @@ def migrateRate(size):
         mu[i] = math.sin(float(size - (i + 1)) / size)          # 迁出率
     return lambdaa, mu
 
-def main(generation, size, num_var, p, hsi_list):
+def main(generation, size, num_var, p, hsi_list, rp, rm):
     '''
     目标：控制入口函数
     参数：
@@ -377,7 +377,7 @@ def main(generation, size, num_var, p, hsi_list):
     f = 0.6                                # 差分因子
     rp_u = 0.25                            # VM请求CPU的指导变量
     rm_u = 0.25                            # VM请求MEM的指导变量
-    p = p
+    p = p                                  # 生成VM的指导变量
     time_base = 65                         # 作为单台虚拟机迁移的基准时间
 
     # compute each chrom immgrate rate and emgrate rate of all sorted chroms
