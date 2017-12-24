@@ -31,12 +31,10 @@ import copy
 import collections
 import datetime
 import json
-# import addtion_phase.init as init
-# import addtion_phase.Contrast as Contrast
-# import addtion_phase.Contrast_with_safe as tolerance
 import Contrast
 import init
 import vm_mbbo
+import tolerance
 
 
 
@@ -56,7 +54,7 @@ def docker2service(scale):
     flag = scale
     while flag > 0:
         # 模拟生成需要随机数量replicas支持的服务
-        x = random.randint(0, 5)
+        x = random.randint(3, 5)
         for i in xrange(x):
             if len(map_d_s) < scale :
                 map_d_s[i+suffix+1] = count
@@ -286,6 +284,130 @@ def safe_FFDSum_3_Consol(bins, map_d_s, map_s_d):
     return bins
 
 def detect_hm_independce(bins, map_d_s, map_s_d):
+    '''
+    对传入的集群状态bins进行以HM为独立性基础的检测与修复
+    @para: map_d_s 记录集群中所有docker-service映射；map_s_d 记录集群正在运行的service-docker映射。
+    @func: 在bins中通过map_s_d检测各服务所有replicas实际所在HMs，对于all replicas same HM情况，
+            则至少变换一个replica使其与集群中最大下标HM上某容器交换位置，直至检查完所有的service并返回修复独立性之后的bins
+    '''
+    # 遍历所有容器service
+    for service, dockers in map_s_d.items():
+        # 各服务所需容器配置及replicas数量
+        object_CPU, object_MEM, nums = bins['c_rp'][dockers[0]], bins['c_rm'][dockers[0]], len(dockers)
+        # 若该服务replica为1，即单节点独立;
+        if nums == 1:
+            continue
+        # 该服务所有replicas对应HM下标,及这些HMs多样性
+        d_hms = [bins['population'][0][j][-1] for j in dockers]
+        num_hms = len(set(d_hms))
+        # 若满足独立性，则进行下一个服务检测（实际在说明的时候是要对所欲replicas都进行独立放置）
+        if num_hms != 1:
+            continue
+
+        # 对服务的所有容器都进行调整，使得都分布在不同HM上
+        while nums > 1:
+            # 不满足独立性需要进行修复
+            flag = False
+            # 对该服务的第一个支撑replica从active HMs最大下标者开始依次往前，寻找可与该容器对调换位置的容器
+            origin_docker_suffix = dockers[nums - 1]
+            used_hms = list(set(bins['map_v_h'].values()))
+            used_hms.remove(d_hms[0])
+            origin_vm_suffix = bins['population'][0][origin_docker_suffix][0]
+            for hm in sorted(used_hms, reverse=True):
+                dockers_onHM, vms = find_docker_onHM(bins, hm, 0)
+                # 依次寻找其他HM上可与该服务第一个replica对掉而满足双方资源约束的解
+                for i in xrange(len(dockers_onHM)):
+                    vm_suffix = vms[i]
+                    docker_suffix = dockers_onHM[i]
+                    # 换出原docker换入replica之后的资源
+                    reversed_cpu1 = bins['v_rp'][vm_suffix] - (bins['v_p_cost'][0][vm_suffix] - bins['c_rp'][docker_suffix] + object_CPU)
+                    reversed_mem1 = bins['v_rm'][vm_suffix] - (bins['v_m_cost'][0][vm_suffix] - bins['c_rm'][docker_suffix] + object_MEM)
+                    # 换入新容器换出replica后的资源
+                    reversed_cpu0 = bins['v_rp'][origin_vm_suffix] - (bins['v_p_cost'][0][origin_vm_suffix] + bins['c_rp'][docker_suffix] - object_CPU)
+                    reversed_mem0 = bins['v_rm'][origin_vm_suffix] - (bins['v_m_cost'][0][origin_vm_suffix] + bins['c_rm'][docker_suffix] - object_MEM)
+                    # 若对换后满足资源约束，则更新集群
+                    if reversed_cpu0 >= 0 and reversed_cpu1 >= 0 and reversed_mem0 >= 0 and reversed_mem1 >=0:
+                        bins['v_p_cost'][0][vm_suffix] += (object_CPU - bins['c_rp'][docker_suffix])
+                        bins['v_m_cost'][0][vm_suffix] += (object_MEM - bins['c_rm'][docker_suffix])
+                        bins['v_p_cost'][0][origin_vm_suffix] += (bins['c_rp'][docker_suffix] - object_CPU)
+                        bins['v_m_cost'][0][origin_vm_suffix] += (bins['c_rm'][docker_suffix] - object_MEM)
+                        bins['population'][0][origin_docker_suffix] = [vm_suffix, hm]
+                        bins['population'][0][docker_suffix] = [origin_vm_suffix, d_hms[nums - 1]]
+                        # map_v_h由于是对掉并不会产生新的拓扑变化，故不用更新
+                        flag = True
+                        nums -= 1
+                        break
+                    # 或者是否有active VM能够容纳该容器
+                    reversed_cpu2 = bins['v_rp'][vm_suffix] - (bins['v_p_cost'][0][vm_suffix] + object_CPU)
+                    reversed_mem2 = bins['v_rm'][vm_suffix] - (bins['v_m_cost'][0][vm_suffix] + object_MEM)
+                    if reversed_cpu2 >= 0 and reversed_cpu2 >= 0:
+                        bins['v_p_cost'][0][vm_suffix] += object_CPU
+                        bins['v_m_cost'][0][vm_suffix] += object_MEM
+                        bins['v_p_cost'][0][origin_vm_suffix] -= object_CPU
+                        bins['v_m_cost'][0][origin_vm_suffix] -= object_MEM
+                        bins['population'][0][origin_docker_suffix] = [vm_suffix, hm]
+                        flag = True
+                        nums -= 1
+                        break
+                # 若在该hm上对换而修复，则推出本次service修复，进入下一个
+                if flag:
+                    # 否则继续寻找下一个hm
+                    break
+            
+            # 若所有active HMs均无发用于修复独立性,则新建HM与VM
+            if not flag:
+                second_flag = Contrast.find_HM_complex(bins, object_CPU, object_MEM, vm_option)
+                
+                # 代表active HMs中有HM可以容纳能够放入该容器的最小VM
+                if second_flag:
+                    hm_suffix, min_vm = flag
+                    vm_suffix = len(bins['v_p_cost'][0])
+
+                    # 更新放入容器后造成的VM、HM资源变化
+                    bins['v_p_cost'][0].append(object_CPU)
+                    bins['v_m_cost'][0].append(object_MEM)
+                    bins['h_p_cost'][0][hm_suffix] += min_vm[0]
+                    bins['h_m_cost'][0][hm_suffix] += min_vm[1]
+
+                    # 追加系统容器、vm数量及资源分布
+                    bins['c_rp'].append(object_CPU)
+                    bins['c_rm'].append(object_MEM)
+                    bins['v_rp'].append(min_vm[0])
+                    bins['v_rm'].append(min_vm[1])
+
+                    # 更新‘population’、‘map_v_h’
+                    bins['population'][0].append([vm_suffix, hm_suffix])
+                    bins['map_v_h'][vm_suffix] = hm_suffix
+                    flag = True
+                    nums -= 1
+                    break
+
+                # 若所有active HMs均不满足，则新建HM并新建VM，（所建VM规格先不加以控制）
+                if not second_flag:
+                    # 创建最大VM
+                    vm = Contrast.create_VM_random(object_CPU, object_MEM,vm_option)
+                    vm_suffix = len(bins['v_p_cost'][0])
+                    hm_suffix = len(bins['h_m_cost'][0])
+
+                    # 更新放入容器后造成的VM、HM资源变化
+                    bins['v_p_cost'][0].append(object_CPU)
+                    bins['v_m_cost'][0].append(object_MEM)
+                    bins['h_p_cost'][0].append(vm['rp'])
+                    bins['h_m_cost'][0].append(vm['rm'])
+
+                    # 追加系统容器、vm数量及资源分布
+                    bins['v_rp'].append(vm['rp'])
+                    bins['v_rm'].append(vm['rm'])
+
+                    # 更新‘population’、‘map_v_h’
+                    bins['population'][0][origin_docker_suffix] = [vm_suffix, hm_suffix]
+                    bins['map_v_h'][vm_suffix] = hm_suffix
+                    flag = True
+                    nums -= 1
+                    break
+    return bins
+
+def deprated_detect_hm_independce(bins, map_d_s, map_s_d):
     '''
     对传入的集群状态bins进行以HM为独立性基础的检测与修复
     @para: map_d_s 记录集群中所有docker-service映射；map_s_d 记录集群正在运行的service-docker映射。
@@ -603,7 +725,7 @@ def map_h2v(bins):
         map_h_v[value].append(key)
     return map_h_v
 
-def consolidation_costs(bins, p_crash, size=1):
+def consolidation_costs(bins, num_crash, map_d_s, map_s_d, size=1):
     '''
     仅计算聚合放置的优化目标，即能耗与资源碎片化指数与容错能力
     以集群环境中所有running VMs/HMs作为计算对象（）
@@ -644,12 +766,13 @@ def consolidation_costs(bins, p_crash, size=1):
         # 计算VM迁移时间（仅聚合阶段）
         pass
 
-        # 模拟宕机计算容错  (没写完)
-        # cost['tolerance'] = tolerance.simulate_crash_HM(p_crash, max_suffix, bins, addtion0, map_d_s)
+        # 模拟宕机计算容错
+        cost['tolerance'] = tolerance.simulate_crash_HM(bins, num_crash, map_d_s, map_s_d)
     return cost
 
 def for_vm_mbbo(bins):
     '''
+    2017-12-24 本方法同样适用于doc_mbbo中！
     vm_mbbo将容器当作VM中服务，故聚合时不予理会，只需记录各虚拟机实际被容器占用的v_p_cost与v_m_cost用于进行对比
     提取集群当前真正用于承载容器的VM CPU、MEM列表，未占用者设为0.0
     '''
@@ -714,10 +837,42 @@ if __name__ == '__main__':
 
 
 
-    # 对比实验二 （只差对tolerance代价计算的修改）
+    # 对比实验二  （已完成）
     # 用于d-v-h3层支持HM级容错聚合与v-h2层不支持容错聚合对比， 使用FFDSum 方法聚合
     # 由init.main_init()创建随机集群状态后生成map_d_s、map_s_d映射，用于容错计算与独立性修复检测
-    p_crash = 0.1
+    # num_crash = 8
+    # data = {
+    #     'scale' : [],
+    #     'degree_of_concentration_2':[],
+    #     'tolerance_2': [],
+    #     'power_cost_2': [],
+    #     'used_hms_2': [],
+    #     'degree_of_concentration_3':[],
+    #     'tolerance_3': [],
+    #     'power_cost_3': [],
+    #     'used_hms_3': []
+    # }
+    # cycle = [100, 200, 300]
+    # for scale in cycle:
+    #     # 初始准备
+    #     init_popu0 = init.main_init(scale, 1.0)
+    #     map_d_s, map_s_d = docker2service(scale)
+    #     init_popu1 = copy.deepcopy(init_popu0)
+    #     cost0 = consolidation_costs(init_popu0, num_crash, map_d_s, map_s_d)
+    #     # 3层聚合与代价计算(支持HM级容错)
+    #     init_popu0  = safe_FFDSum_3_Consol(init_popu0, map_d_s, map_s_d)
+    #     cost1 = consolidation_costs(init_popu0, num_crash, map_d_s, map_s_d)
+    #     # 2层聚合与代价计算（不支持容错）
+    #     init_popu1 = FFDSum_2_Consol(init_popu1)
+    #     cost2 = consolidation_costs(init_popu1, num_crash, map_d_s, map_s_d)
+    #     s0 = "\n聚合前集群代价={}\n支持HM级容错的 3层聚合  cost0={}\n 不支持容错的 2层聚合 cost1={}".format(cost0, cost1, cost2)
+    #     with open('aaa.py', 'a') as f:
+    #         f.write(s0)
+
+
+
+    # 用于d-v-h3层聚合与v-h2层聚合对比， 使用mbbo 方法聚合（未完成，明天写）
+    num_crash = 8
     data = {
         'scale' : [],
         'degree_of_concentration_2':[],
@@ -729,57 +884,19 @@ if __name__ == '__main__':
         'power_cost_3': [],
         'used_hms_3': []
     }
-    cycle = [100, 200, 300]
+    cycle = [100, 500, 1000, 4000, 5000]
     for scale in cycle:
-        # 初始准备
         init_popu0 = init.main_init(scale, 1.0)
-        map_d_s, map_s_d = docker2service(scale)
-        cost0 = consolidation_costs(init_popu0, p_crash)
         init_popu1 = copy.deepcopy(init_popu0)
-        # 3层聚合与代价计算(支持HM级容错)
-        init_popu0  = safe_FFDSum_3_Consol(init_popu0, map_d_s, map_s_d)
-        cost1 = consolidation_costs(init_popu0, p_crash)     # 修复代价计算中tolerance的计算
-        # 2层聚合与代价计算（不支持容错）
-        init_popu1 = FFDSum_2_Consol(init_popu1)
-        cost2 = consolidation_costs(init_popu1, p_crash)
-        s0 = "\n聚合前集群代价={}\n支持HM级容错的 3层聚合  cost0={}\n 不支持容错的 2层聚合 cost1={}".format(cost0, cost1, cost2)
+        # 2层聚合时需要的集群状态信息
+        rp, rm, v_p_cost, v_m_cost = for_vm_mbbo(init_popu0)
+        cost0 = vm_mbbo.main(100, 5, 100, 1.0, ['power'], rp, rm, v_p_cost, v_m_cost)
+        # 3层聚合时需要的集群状态信息
+        rp3, rm3, v_p_cost3, v_m_cost3 = for_vm_mbbo(init_popu1)
+        init_popu0  = doc_mbbo(init_popu0)   没写完！！！！
+        s0 = "\n3层聚合  cost0={}\n 2层聚合 cost1={}".format(cost0, cost1)
         with open('aaa.py', 'a') as f:
             f.write(s0)
-
-
-
-
-
-
-
-
-
-#     # 用于d-v-h3层聚合与v-h2层聚合对比， 使用mbbo 方法聚合（未完成，明天写）
-#     p_crash = 0.1
-#     data = {
-#         'scale' : [],
-#         'degree_of_concentration_2':[],
-#         'tolerance_2': [],
-#         'power_cost_2': [],
-#         'used_hms_2': [],
-#         'degree_of_concentration_3':[],
-#         'tolerance_3': [],
-#         'power_cost_3': [],
-#         'used_hms_3': []
-#     }
-#     cycle = [100, 500, 1000, 4000, 5000]
-#     for scale in cycle:
-#         init_popu0 = init.main_init(scale, 1.0)
-#         init_popu1 = copy.deepcopy(init_popu0)
-#         # 2层聚合时需要的集群状态信息
-#         rp, rm, v_p_cost, v_m_cost = for_vm_mbbo(init_popu0)
-#         cost0 = vm_mbbo.main(100, 5, 100, 1.0, ['power'], rp, rm, v_p_cost, v_m_cost)
-#         # 3层聚合时需要的集群状态信息
-#         rp3, rm3, v_p_cost3, v_m_cost3 = for_vm_mbbo(init_popu1)
-#         init_popu0  = doc_mbbo(init_popu0)   没写完！！！！
-#         s0 = "\n3层聚合  cost0={}\n 2层聚合 cost1={}".format(cost0, cost1)
-#         with open('aaa.py', 'a') as f:
-#             f.write(s0)
 
 
 

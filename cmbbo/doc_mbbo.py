@@ -29,6 +29,7 @@ import sys
 import copy
 #from pyspark import SparkContext
 
+vm_option = [(0.3, 0.3), (0.5, 0.4), (0.6, 0.5), (0.8, 0.7), (1.0, 0.8), (1.0, 1.0)]
 
 def init_Docker(rp_u, rm_u, p, num_var):
     '''
@@ -108,7 +109,6 @@ def init_VM(c_rp, c_rm, vm_option, num_var):
         else:
             continue
 
-
 def migrate_Rate(size):
     '''
     目标：compute the Cosine migration rates，候选解越优秀迁入率越低，迁出率越高
@@ -121,7 +121,6 @@ def migrate_Rate(size):
         lambdaa[i] = math.cos(float(size - (i + 1)) / size)     # 按照种群所有候选解排名后的顺序，依次求解余弦迁入率，rank值越小迁入率越小
         mu[i] = math.sin(float(size - (i + 1)) / size)                  # 迁出率
     return lambdaa, mu
-
 
 def check_effective(popu1, size, num_var):
     '''
@@ -165,7 +164,6 @@ def check_effective(popu1, size, num_var):
                 return False
     return True
 
-
 def range2rect(size, num_var, type0):
     '''
     构造size * num_var 的矩阵
@@ -175,9 +173,9 @@ def range2rect(size, num_var, type0):
     res = [[type0 for j in xrange(num_var)] for i in xrange(size)]
     return res
 
-(迁移代价为migration_time)
 def make_population(size, num_var, c_rp, c_rm, v_rp, v_rm, time_base): #    作为全局变量，按照需要传入各方法中 f, p_mutate, time_base, lambdaa):
     '''
+    2017-12-24 用[{},{}...]记录各个解的map_v_h
     构造一个population，包含size个候选解chrom,每个chrom是num_var个分别记录该容器所在的vm和hm编号的元组
     '''
     # print "进入make_population"
@@ -187,7 +185,7 @@ def make_population(size, num_var, c_rp, c_rm, v_rp, v_rm, time_base): #    作�
         'v_rp': v_rp,                                             # 每个vm的cpu请求
         'v_rm': v_rm,                                             # 每个vm的mem请求
         'population': range2rect(size, num_var, [0, 0]),          # size个chrom，每个chrom有num_var个双元素list[vm,hm]对应每个容器放置的vm编号和物理机编号
-        'map_v_h':  [{} for i in xrange(size)]
+        'map_v_h':  [{} for i in xrange(size)],
         'init_save': range2rect(size, num_var, [0, 0]),           # 保存初始size个chroms
         'v_p_cost': range2rect(size, num_var, 0.0),               # size个num_var长list记录每个vm上所有容器的cpu总请求,初始为0
         'v_m_cost': range2rect(size, num_var, 0.0),               # 每个vm被容器请求的mem，初始为0
@@ -205,7 +203,6 @@ def make_population(size, num_var, c_rp, c_rm, v_rp, v_rm, time_base): #    作�
         'elite_chrom': range(num_var)                             # list(num_var)，保存每代种群中精英chrom
     }
     return population0
-
 
 def initialize_population(popu1, size, num_var):
     '''
@@ -254,7 +251,6 @@ def initialize_population(popu1, size, num_var):
         return popu1
     else:
         sys.exit("failed in initializating population")
-
 
 def mbbode_migration(popu1, size, num_var, f, lambdaa):
     '''
@@ -305,7 +301,6 @@ def mbbode_mutation(popu1, size, num_var, p_mutate):
                 tmp_h_id = random.randint(0, num_var-1)
                 popu1['population'][i][j] = [tmp_v_id, tmp_h_id]
     return popu1
-
 
 def fix_effective(popu1, size, num_var):
     '''
@@ -480,8 +475,6 @@ def fix_effective(popu1, size, num_var):
                     # 否则继续while循环，取出次小的vm
     return popu1
 
-
-
 def mbbode_cost(popu1, size, num_var, time_base):
     '''
     首先计算本次迭代后实际vm,hm的资源占用情况，接着判断解的有效性
@@ -607,7 +600,6 @@ def mbbode_rank(popu1, size, hsi_list):
 
     return popu1
 
-
 def main(generation, size, num_var, p, hsi_list):
     '''
     主程序流程：初代解-代价计算-排名-迁移-突变-代价计算-排名-精英解替换-继续迭代
@@ -629,7 +621,7 @@ def main(generation, size, num_var, p, hsi_list):
 
     # 2.初始化num_var个容器和vm，以及计算迁移率
     c_rp, c_rm = init_Docker(rp_u, rm_u, p, num_var)
-    v_rp, v_rm = init_VM(c_rp, c_rm, rp_option, rm_option, num_var)
+    v_rp, v_rm = init_VM(c_rp, c_rm, vm_option, num_var)
     lambdaa, mu = migrate_Rate(size)
 
     print "开始主流程"
