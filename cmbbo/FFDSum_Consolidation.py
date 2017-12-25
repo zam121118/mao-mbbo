@@ -55,7 +55,7 @@ def docker2service(scale):
     flag = scale
     while flag > 0:
         # 模拟生成需要随机数量replicas支持的服务
-        x = random.randint(3, 5)
+        x = random.randint(0, 5)
         for i in xrange(x):
             if len(map_d_s) < scale :
                 map_d_s[i+suffix+1] = count
@@ -771,6 +771,45 @@ def consolidation_costs(bins, num_crash, map_d_s, map_s_d, size=1):
         cost['tolerance'] = tolerance.simulate_crash_HM(bins, num_crash, map_d_s, map_s_d)
     return cost
 
+def consolidation_costs_nosafe(bins, num_crash, size=1):
+    '''
+    仅计算聚合放置的优化目标，即能耗与资源碎片化指数与容错能力
+    以集群环境中所有running VMs/HMs作为计算对象（）
+    '''
+    # print "进入能耗、负载方差计算"
+    # First, 构造代价变量，计算实际running VMs HMs
+    cost = {
+        'degree_of_concentration': 0.0,
+        'power_cost': 0.0,
+        'used_hms': 0,
+        }
+
+    map_h_v = map_h2v(bins)
+    map_v_p = map_v2h(bins)
+    used_vms = map_v_p.keys()
+    used_hms = list(set(map_v_p.values()))
+    
+    # Then, 对bins中前size个方案计算代价值（在新增算法中，size只有0一种值）
+    for i in xrange(size):
+        utilization = 0
+
+        print "正在进行代价计算"
+        # 计算总能耗及各running VM/HM负载均衡指数
+        tmp0, tmp1 = len(used_vms), len(used_hms)
+        cost['used_hms'] = tmp1
+        while tmp1 > 0:
+            h = used_hms[tmp1 - 1]   
+            # 以docker作为实际负载进行代价计算
+            true_load_cpu = sum([bins['v_p_cost'][i][v] for v in map_h_v[h]])
+            true_load_mem = sum([bins['v_m_cost'][i][v] for v in map_h_v[h]])
+            # 计算集群剩余资源量即各HM节点cpu、mem余量之乘积，所有active HM求和
+            utilization += (1.0 - true_load_cpu) * (1.0 - true_load_mem)
+            cost['power_cost'] += 446.7 + 5.28*true_load_cpu - 0.04747*true_load_cpu**2 + 0.000334*true_load_cpu**3
+            tmp1 -= 1
+        cost['degree_of_concentration'] = 100 * cost['used_hms'] - 13 * utilization
+        print "资源碎片化程度计算完毕"
+    return cost
+
 def for_vm_mbbo(bins):
     '''
     2017-12-24 本方法同样适用于doc_mbbo中！
@@ -798,10 +837,14 @@ def create_JSON(data, scale, degree_of_concentration, power_cost, tolerance, use
     将计算代价结果追加至data中便于后期记录文件
     '''
     data['scale'].append(scale)
-    data['degree_of_concentration'].append(degree_of_concentration)
-    data['power_cost'].append(power_cost)
-    data['tolerance'].append(tolerance)
-    data['used_hms'].append(used_hms)
+    data['degree_of_concentration_2'].append(degree_of_concentration)
+    data['power_cost_2'].append(power_cost)
+    data['used_hms_2'].append(used_hms)
+    data['degree_of_concentration_3'].append(degree_of_concentration)
+    data['power_cost_3'].append(power_cost)
+    data['used_hms_3'].append(used_hms)
+    data['tolerance_2'].append(tolerance)
+    data['tolerance_3'].append(tolerance)
     return data
 
 if __name__ == '__main__':
@@ -810,129 +853,200 @@ if __name__ == '__main__':
     '''
     # 对比实验一 (已完成)
     # 用于d-v-h3层聚合与v-h2层聚合 FFDSum 聚合对比， 不考虑容错能力并且在代价中也不计算tolerance
-    # p_crash = 0.1
     # data = {
     #     'scale' : [],
+    #     'degree_of_concentration_0':[],
+    #     'power_cost_0': [],
+    #     'used_hms_0': [],
     #     'degree_of_concentration_2':[],
-    #     'tolerance_2': [],
     #     'power_cost_2': [],
     #     'used_hms_2': [],
     #     'degree_of_concentration_3':[],
-    #     'tolerance_3': [],
     #     'power_cost_3': [],
     #     'used_hms_3': []
     # }
-    # cycle = [100, 500, 1000, 4000, 5000]
+    # cycle = [500, 2000, 7000, 10000, 30000]
     # for scale in cycle:
     #     init_popu0 = init.main_init(scale, 1.0)
     #     init_popu1 = copy.deepcopy(init_popu0)
+    #     # 聚合前的各项代价
+    #     cost0 = consolidation_costs_nosafe(init_popu0, 0)
+    #     data['scale'].append(scale)
+    #     data['degree_of_concentration_0'].append(cost0['degree_of_concentration'])
+    #     data['power_cost_0'].append(cost0['power_cost'])
+    #     data['used_hms_0'].append(cost0['used_hms'])
+
     #     # 3层聚合与代价计算(不考虑容错)
     #     init_popu0  = FFDSum_3_Consol(init_popu0)
-    #     cost0 = consolidation_costs(init_popu0, p_crash)
+    #     cost3 = consolidation_costs_nosafe(init_popu0, 0)
+    #     data['degree_of_concentration_3'].append(cost3['degree_of_concentration'])
+    #     data['power_cost_3'].append(cost3['power_cost'])
+    #     data['used_hms_3'].append(cost3['used_hms'])
+        
     #     # 2层聚合与代价计算（不考虑容错）
     #     init_popu1 = FFDSum_2_Consol(init_popu1)
-    #     cost1 = consolidation_costs(init_popu1, p_crash)
-    #     s0 = "\n不考虑容错的： 3层聚合  cost0={}\n 2层聚合 cost1={}".format(cost0, cost1)
-    #     with open('aaa.py', 'a') as f:
-    #         f.write(s0)
-
+    #     cost2 = consolidation_costs_nosafe(init_popu1, 0)
+    #     data['degree_of_concentration_2'].append(cost2['degree_of_concentration'])
+    #     data['power_cost_2'].append(cost2['power_cost'])
+    #     data['used_hms_2'].append(cost2['used_hms'])
+        
+    #     with open('.//viz//ffdsum-consolidation-2&3-no-safe-demo.json','a') as f:
+    #         f.flush()
+    #         json.dump(data, f, indent=2)
 
 
     # 对比实验二  （已完成）
     # 用于d-v-h3层支持HM级容错聚合与v-h2层不支持容错聚合对比， 使用FFDSum 方法聚合
     # 由init.main_init()创建随机集群状态后生成map_d_s、map_s_d映射，用于容错计算与独立性修复检测
-    # num_crash = 8
+    # num_crash = 20
     # data = {
     #     'scale' : [],
+    #     'degree_of_concentration_0':[],
+    #     'power_cost_0': [],
+    #     'used_hms_0': [],
+    #     'tolerance_0':[],
     #     'degree_of_concentration_2':[],
-    #     'tolerance_2': [],
     #     'power_cost_2': [],
     #     'used_hms_2': [],
+    #     'tolerance_2':[],
     #     'degree_of_concentration_3':[],
-    #     'tolerance_3': [],
     #     'power_cost_3': [],
-    #     'used_hms_3': []
+    #     'used_hms_3': [],
+    #     'tolerance_3':[]
     # }
-    # cycle = [100, 200, 300]
+    # cycle = [500, 2000, 7000, 10000, 30000]
     # for scale in cycle:
     #     # 初始准备
     #     init_popu0 = init.main_init(scale, 1.0)
     #     map_d_s, map_s_d = docker2service(scale)
     #     init_popu1 = copy.deepcopy(init_popu0)
     #     cost0 = consolidation_costs(init_popu0, num_crash, map_d_s, map_s_d)
+    #     data['scale'].append(scale)
+    #     data['degree_of_concentration_0'].append(cost0['degree_of_concentration'])
+    #     data['power_cost_0'].append(cost0['power_cost'])
+    #     data['used_hms_0'].append(cost0['used_hms'])
+    #     data['tolerance_0'].append(cost0['tolerance'])
+
     #     # 3层聚合与代价计算(支持HM级容错)
     #     init_popu0  = safe_FFDSum_3_Consol(init_popu0, map_d_s, map_s_d)
-    #     cost1 = consolidation_costs(init_popu0, num_crash, map_d_s, map_s_d)
+    #     cost3 = consolidation_costs(init_popu0, num_crash, map_d_s, map_s_d)
+    #     data['degree_of_concentration_3'].append(cost3['degree_of_concentration'])
+    #     data['power_cost_3'].append(cost3['power_cost'])
+    #     data['used_hms_3'].append(cost3['used_hms'])
+    #     data['tolerance_3'].append(cost3['tolerance'])      
+        
     #     # 2层聚合与代价计算（不支持容错）
     #     init_popu1 = FFDSum_2_Consol(init_popu1)
     #     cost2 = consolidation_costs(init_popu1, num_crash, map_d_s, map_s_d)
-    #     s0 = "\n聚合前集群代价={}\n支持HM级容错的 3层聚合  cost0={}\n 不支持容错的 2层聚合 cost1={}".format(cost0, cost1, cost2)
-    #     with open('aaa.py', 'a') as f:
-    #         f.write(s0)
+    #     data['degree_of_concentration_2'].append(cost2['degree_of_concentration'])
+    #     data['power_cost_2'].append(cost2['power_cost'])
+    #     data['used_hms_2'].append(cost2['used_hms'])
+    #     data['tolerance_2'].append(cost2['tolerance'])
+
+    # with open('.//viz//ffdsum-consolidation-2&3-safe-demo.json','a') as f:
+    #     f.flush()
+    #     json.dump(data, f, indent=2)
 
 
 
     # 用于d-v-h3层聚合与v-h2层聚合对比，不考虑容错的  使用mbbo 方法聚合（已完成）
-    # num_crash = 8
-    # data = {
-    #     'scale' : [],
-    #     'degree_of_concentration_2':[],
-    #     'tolerance_2': [],
-    #     'power_cost_2': [],
-    #     'used_hms_2': [],
-    #     'degree_of_concentration_3':[],
-    #     'tolerance_3': [],
-    #     'power_cost_3': [],
-    #     'used_hms_3': []
-    # }
-    # cycle = [100, 500, 1000, 4000, 5000]
-    # for scale in cycle:
-    #     init_popu0 = init.main_init(scale, 1.0)
-
-    #     # init_popu1 = copy.deepcopy(init_popu0)
-    #     # 2层聚合时需要的集群状态信息
-    #     rp, rm, v_p_cost, v_m_cost = for_vm_mbbo(init_popu0)
-    #     cost0, elite_chrom0 = vm_mbbo.main(100, 5, 100, 1.0, ['power'], rp, rm, v_p_cost, v_m_cost)
-    #     # 3层聚合时需要的集群状态信息
-    #     c_rp, c_rm = init_popu0['c_rp'], init_popu0['c_rm']
-    #     rp1, rm1 = copy.deepcopy(rp), copy.deepcopy(rm)
-    #     cost1, elite_chrom1  = doc_mbbo.main(100, 5, 100, 1.0, ['power'], rp, rm, c_rp, c_rm)
-    #     s0 = "\n3层mbbo聚合  cost1={}\n 2层mbbo聚合 cost0={}".format(cost1, cost0)
-    #     with open('aaa.py', 'a') as f:
-    #         f.write(s0)
-
-
-
-    # 用于d-v-h3层架构下,FFDSum与mbbo聚合结果对比（这个不需要画图，可以弄成表格）
-    num_crash = 8
+    gen = 10000
+    num_crash = 20
     data = {
         'scale' : [],
+        'degree_of_concentration_0':[],
+        'power_cost_0': [],
+        'used_hms_0': [],
         'degree_of_concentration_2':[],
-        'tolerance_2': [],
         'power_cost_2': [],
         'used_hms_2': [],
         'degree_of_concentration_3':[],
-        'tolerance_3': [],
         'power_cost_3': [],
         'used_hms_3': []
     }
-    cycle = [100, 500, 1000, 4000, 5000]
+    cycle = [500, 2000, 7000]#, 10000, 30000]
     for scale in cycle:
+        # 初始准备
         init_popu0 = init.main_init(scale, 1.0)
-        
         # init_popu1 = copy.deepcopy(init_popu0)
-        # 2层聚合时需要的集群状态信息
         rp, rm, v_p_cost, v_m_cost = for_vm_mbbo(init_popu0)
-        cost0, elite_chrom0 = vm_mbbo.main(100, 5, 100, 1.0, ['power'], rp, rm, v_p_cost, v_m_cost)
-        # 3层聚合时需要的集群状态信息
         c_rp, c_rm = init_popu0['c_rp'], init_popu0['c_rm']
         rp1, rm1 = copy.deepcopy(rp), copy.deepcopy(rm)
-        cost1, elite_chrom1  = doc_mbbo.main(100, 5, 100, 1.0, ['power'], rp, rm, c_rp, c_rm)
-        s0 = "\n3层mbbo聚合  cost1={}\n 2层mbbo聚合 cost0={}".format(cost1, cost0)
-        with open('aaa.py', 'a') as f:
-            f.write(s0)
+
+        # 聚合前的各项代价
+        cost0 = consolidation_costs_nosafe(init_popu0, 0)
+        data['scale'].append(scale)
+        data['degree_of_concentration_0'].append(cost0['degree_of_concentration'])
+        data['power_cost_0'].append(cost0['power_cost'])
+        data['used_hms_0'].append(cost0['used_hms'])
+
+        # 2层mbbo聚合时需要的集群状态信息(不容错)
+        cost2, elite_chrom2 = vm_mbbo.main(gen, 5, scale, 1.0, ['power'], rp, rm, v_p_cost, v_m_cost)
+        data['degree_of_concentration_2'].append(cost2['degree_of_concentration'])
+        data['power_cost_2'].append(cost2['power_cost'])
+        data['used_hms_2'].append(cost2['used_hms'])
+
+        # 3层mbbo聚合时需要的集群状态信息（不容错）
+        cost3, elite_chrom3  = doc_mbbo.main(gen, 5, scale, 1.0, ['power'], rp1, rm1, c_rp, c_rm)
+        data['degree_of_concentration_3'].append(cost3['degree_of_concentration'])
+        data['power_cost_3'].append(cost3['power_cost'])
+        data['used_hms_3'].append(cost3['used_hms'])
+        
+        with open('.//viz//mbbo-consolidation-2&3-no-safe-demo.json','a') as f:
+            f.flush()
+            json.dump(data, f, indent=2)        
 
 
+
+    # 用于d-v-h3层架构下,FFDSum与mbbo聚合结果对比（不支持容错）
+    # num_crash = 20
+    # data = {
+    #     'scale' : [],
+    #     'degree_of_concentration_0':[],
+    #     'power_cost_0': [],
+    #     'used_hms_0': [],
+    #     'degree_of_concentration_ffd':[],
+    #     'power_cost_ffd': [],
+    #     'used_hms_ffd': [],
+    #     'degree_of_concentration_mbbo':[],
+    #     'power_cost_mbbo': [],
+    #     'used_hms_mbbo': []
+    # }
+    # cycle = [100, 500, 1000, 4000, 5000]
+    # for scale in cycle:
+    #     # 初始准备
+    #     init_popu0 = init.main_init(scale, 1.0)
+    #     rp, rm, v_p_cost, v_m_cost = for_vm_mbbo(init_popu0)
+    #     c_rp, c_rm = init_popu0['c_rp'], init_popu0['c_rm']
+    #     rp1, rm1 = copy.deepcopy(rp), copy.deepcopy(rm)
+
+    #     # 聚合前的各项代价
+    #     cost0 = consolidation_costs_nosafe(init_popu0, 0)
+    #     data['scale'].append(scale)
+    #     data['degree_of_concentration_0'].append(cost0['degree_of_concentration'])
+    #     data['power_cost_0'].append(cost0['power_cost'])
+    #     data['used_hms_0'].append(cost0['used_hms'])
+
+    #     # FFDSum聚合方法(不容错)
+    #     init_popu0  = FFDSum_3_Consol(init_popu0)
+    #     cost2 = consolidation_costs_nosafe(init_popu0, 0)
+    #     data['degree_of_concentration_ffd'].append(cost2['degree_of_concentration'])
+    #     data['power_cost_ffd'].append(cost2['power_cost'])
+    #     data['used_hms_ffd'].append(cost2['used_hms'])
+
+    #     # MBBO聚合方法（不容错）
+    #     cost3, elite_chrom3  = doc_mbbo.main(100, 5, scale, 1.0, ['power'], rp1, rm1, c_rp, c_rm)
+    #     data['degree_of_concentration_mbbo'].append(cost3['degree_of_concentration'])
+    #     data['power_cost_mbbo'].append(cost3['power_cost'])
+    #     data['used_hms_mbbo'].append(cost3['used_hms'])
+
+    #     with open('.//viz//consolidation-mbbo-ffd-no-safe-demo.json','a') as f:
+    #         f.flush()
+    #         json.dump(data, f, indent=2)
+
+
+
+    # 3层架构下mbbo与FFDSum的聚合对比（支持容错）
 
 
 
