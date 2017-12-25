@@ -34,6 +34,7 @@ import json
 import Contrast
 import init
 import vm_mbbo
+import doc_mbbo
 import tolerance
 
 
@@ -871,7 +872,38 @@ if __name__ == '__main__':
 
 
 
-    # 用于d-v-h3层聚合与v-h2层聚合对比， 使用mbbo 方法聚合（未完成，明天写）
+    # 用于d-v-h3层聚合与v-h2层聚合对比，不考虑容错的  使用mbbo 方法聚合（已完成）
+    # num_crash = 8
+    # data = {
+    #     'scale' : [],
+    #     'degree_of_concentration_2':[],
+    #     'tolerance_2': [],
+    #     'power_cost_2': [],
+    #     'used_hms_2': [],
+    #     'degree_of_concentration_3':[],
+    #     'tolerance_3': [],
+    #     'power_cost_3': [],
+    #     'used_hms_3': []
+    # }
+    # cycle = [100, 500, 1000, 4000, 5000]
+    # for scale in cycle:
+    #     init_popu0 = init.main_init(scale, 1.0)
+
+    #     # init_popu1 = copy.deepcopy(init_popu0)
+    #     # 2层聚合时需要的集群状态信息
+    #     rp, rm, v_p_cost, v_m_cost = for_vm_mbbo(init_popu0)
+    #     cost0, elite_chrom0 = vm_mbbo.main(100, 5, 100, 1.0, ['power'], rp, rm, v_p_cost, v_m_cost)
+    #     # 3层聚合时需要的集群状态信息
+    #     c_rp, c_rm = init_popu0['c_rp'], init_popu0['c_rm']
+    #     rp1, rm1 = copy.deepcopy(rp), copy.deepcopy(rm)
+    #     cost1, elite_chrom1  = doc_mbbo.main(100, 5, 100, 1.0, ['power'], rp, rm, c_rp, c_rm)
+    #     s0 = "\n3层mbbo聚合  cost1={}\n 2层mbbo聚合 cost0={}".format(cost1, cost0)
+    #     with open('aaa.py', 'a') as f:
+    #         f.write(s0)
+
+
+
+    # 用于d-v-h3层架构下,FFDSum与mbbo聚合结果对比（这个不需要画图，可以弄成表格）
     num_crash = 8
     data = {
         'scale' : [],
@@ -887,21 +919,18 @@ if __name__ == '__main__':
     cycle = [100, 500, 1000, 4000, 5000]
     for scale in cycle:
         init_popu0 = init.main_init(scale, 1.0)
-        init_popu1 = copy.deepcopy(init_popu0)
+        
+        # init_popu1 = copy.deepcopy(init_popu0)
         # 2层聚合时需要的集群状态信息
         rp, rm, v_p_cost, v_m_cost = for_vm_mbbo(init_popu0)
-        cost0 = vm_mbbo.main(100, 5, 100, 1.0, ['power'], rp, rm, v_p_cost, v_m_cost)
+        cost0, elite_chrom0 = vm_mbbo.main(100, 5, 100, 1.0, ['power'], rp, rm, v_p_cost, v_m_cost)
         # 3层聚合时需要的集群状态信息
-        rp3, rm3, v_p_cost3, v_m_cost3 = for_vm_mbbo(init_popu1)
-        init_popu0  = doc_mbbo(init_popu0)   没写完！！！！
-        s0 = "\n3层聚合  cost0={}\n 2层聚合 cost1={}".format(cost0, cost1)
+        c_rp, c_rm = init_popu0['c_rp'], init_popu0['c_rm']
+        rp1, rm1 = copy.deepcopy(rp), copy.deepcopy(rm)
+        cost1, elite_chrom1  = doc_mbbo.main(100, 5, 100, 1.0, ['power'], rp, rm, c_rp, c_rm)
+        s0 = "\n3层mbbo聚合  cost1={}\n 2层mbbo聚合 cost0={}".format(cost1, cost0)
         with open('aaa.py', 'a') as f:
             f.write(s0)
-
-
-
-    # 用于d-v-h3层架构下,FFDSum与mbbo聚合结果对比（这个不需要画图，可以弄成表格）
-
 
 
 

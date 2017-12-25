@@ -135,7 +135,6 @@ def compute_true_cost(chrom, rp, rm, v_p_cost, v_m_cost, size=1):
     cost['h_balance_cost'] = math.sqrt(cost['h_balance_cost'] / len(used_hms))
     # 计算VM迁移时间（仅聚合阶段）
     pass
-
     return cost
 
 def range2rect(size, num_var):
@@ -167,10 +166,12 @@ def make_population(size, num_var, rp, rm, f, p_mutate, time_base, lambdaa):
         'p_cost': range2rect(size, num_var),                                # size x num_var的矩阵，记录每个HM被请求的CPU总量
         'm_cost': range2rect(size, num_var),                                # size x num_var的矩阵，记录每个HM被请求的MEM总量
         'power_cost': [x*0 for x in range(size)],                           # list(size),记录当前代population中，每个chrom的能耗代价
+        'concentration_cost': [x*0 for x in range(size)],
         'h_balance_cost': [x*0 for x in range(size)],                       # list(size),记录当前population中,每个chrom的负载均衡指数
         'migration_time_cost': [x*0+time_base*num_var for x in range(size)],     # list(size),记录迁移时间，这里指定为固定值
         'rank': [x*0 for x in range(size)],                                 # list(size),记录每个chrom排名，rank值越大，排名越靠后
         'elite_power': 999999.0*num_var,                                    # float,记录每代种群中最优秀解的能耗代价值
+        'elite_concentration': 999999.0*num_var,
         'elite_h_balance': 999999.0*num_var,                                # float,记录每代种群中最优秀解的负载均衡指数
         'elite_migration_time': time_base*num_var,                          # float,........的迁移时间
         'elite_chrom': range(num_var)                                       # list(num_var)，保存每代种群中精英chrom
@@ -196,7 +197,8 @@ def initialize_population(popu1):
                     popu1['m_cost'][i][tmp_position] = tmp_m_cost
                     break
     for i in range(popu1['size']):
-        popu1['population0'][i] = tuple(popu1['population'][i])                      # 对初始化后的种群进行保存
+        popu1['population0'][i] = copy.deepcopy(popu1['population'][i])
+        # popu1['population0'][i] = tuple(popu1['population'][i])                      # 对初始化后的种群进行保存
     return popu1
 
 def mbbode_migration(popu1):
@@ -284,11 +286,18 @@ def mbbode_cost(popu1):
     '''
     # compute the power (down HMs的h_p/m_cost为0.0故不影响能耗计算）
     for i in xrange(popu1['size']):
+        count = 0
         popu1['power_cost'][i] = 0.0
+        popu1['concentration_cost'][i] = 0.0
+        utilization = 0          # 用于统计资源碎片化
         for j in range(popu1['num_var']):
-            x = popu1['p_cost'][i][j]
-            if x > 0.0:
+            x, y = popu1['p_cost'][i][j], popu1['m_cost'][i][j]
+            if x != 0.0 or y != 0.0:
+                utilization += (1.0 - x) * (1.0 - y)
                 popu1['power_cost'][i] += (446.7 + 5.28*x - 0.04747*x*x + 0.000334*x*x*x)             # 计算size个chrom的能耗值  能耗与cpu使用率紧密关系
+                count += 1
+        popu1['concentration_cost'][i] = 100 * count - 13 * utilization              # 各chrom的负载均衡代价值
+
 
     # compute the h_balance cost of popu1(仅针对非down 状态HMs进行计算)
     for i in xrange(popu1['size']):
@@ -303,8 +312,7 @@ def mbbode_cost(popu1):
         average_load_index = sum(load_index) / count
         for load in load_index:
             popu1['h_balance_cost'][i] += (load - average_load_index)**2
-        popu1['h_balance_cost'][i] = math.sqrt(popu1['h_balance_cost'][i] / count)              # 各chrom的负载均衡代价值
-
+        popu1['h_balance_cost'][i] = math.sqrt(popu1['h_balance_cost'][i] / count)
 
     # # compute the migration_time_cost of popu1 without getting rid of invalid migration
     # for i in range(popu1['size']):
@@ -351,20 +359,34 @@ def mbbode_rank(popu1, hsi_list):
     # update the value of rank of each chrom
     for i in range(popu1['size']):
         popu1['rank'][i] = 0
-    for i in range(popu1['size']):
-        for j in range(i+1, popu1['size']):                                                            # 按照非支配解排序non-dominated sorting
-            if popu1['power_cost'][i] < popu1['power_cost'][j]:
+    # 此处仅针对聚合优化目标进行
+    for i in xrange(popu1['size']):
+        for j in xrange(i+1, popu1['size']):
+            if popu1['power_cost'][i] <= popu1['power_cost'][j]:
                 popu1['rank'][j] += 1
             elif popu1['power_cost'][i] > popu1['power_cost'][j]:
                 popu1['rank'][i] += 1
-            if popu1['h_balance_cost'][i] < popu1['h_balance_cost'][j]:
+            if popu1['concentration_cost'][i] <= popu1['concentration_cost'][j]:
                 popu1['rank'][j] += 1
-            elif popu1['h_balance_cost'][i] > popu1['h_balance_cost'][j]:
+            elif popu1['concentration_cost'][i] > popu1['concentration_cost'][j]:
                 popu1['rank'][i] += 1
-            if popu1['migration_time_cost'][i] < popu1['migration_time_cost'][j]:
-                popu1['rank'][j] += 1
-            elif popu1['migration_time_cost'][i] > popu1['migration_time_cost'][j]:
-                popu1['rank'][i] += 1
+
+
+    # 以下是针对所有优化目标的
+    # for i in range(popu1['size']):
+    #     for j in range(i+1, popu1['size']):                                                            # 按照非支配解排序non-dominated sorting
+    #         if popu1['power_cost'][i] < popu1['power_cost'][j]:
+    #             popu1['rank'][j] += 1
+    #         elif popu1['power_cost'][i] > popu1['power_cost'][j]:
+    #             popu1['rank'][i] += 1
+    #         if popu1['h_balance_cost'][i] < popu1['h_balance_cost'][j]:
+    #             popu1['rank'][j] += 1
+    #         elif popu1['h_balance_cost'][i] > popu1['h_balance_cost'][j]:
+    #             popu1['rank'][i] += 1
+    #         if popu1['migration_time_cost'][i] < popu1['migration_time_cost'][j]:
+    #             popu1['rank'][j] += 1
+    #         elif popu1['migration_time_cost'][i] > popu1['migration_time_cost'][j]:
+    #             popu1['rank'][i] += 1
 
     # 寻找当前经过迁移突变后种群的排名rank最小值对应的解下标
     rank = popu1['rank'].index(min(popu1['rank']))
@@ -379,11 +401,12 @@ def mbbode_rank(popu1, hsi_list):
             break
     if flag:
         popu1['elite_power'] = popu1['power_cost'][rank]
+        popu1['elite_concentration'] = popu1['concentration_cost'][rank]
         popu1['elite_h_balance'] = popu1['h_balance_cost'][rank]
         popu1['elite_migration_time'] = popu1['migration_time_cost'][rank]
         popu1['elite_chrom'] = popu1['population'][rank][:]
     else:
-        popu1['population'][0] = popu1['elite_chrom'][:]
+        popu1['population'][0] = copy.deepcopy(popu1['elite_chrom'])
     return popu1
 
 def mbbode_get_best_chr(popu1, popu2):
@@ -485,19 +508,19 @@ def main(generation, size, num_var, p, hsi_list, rp, rm, v_p_cost, v_m_cost):
     save_chrom = copy.deepcopy(init_population['population'][tmp])
     save_cost = {
         'power_cost':init_population['power_cost'][tmp],
-        'h_balance_cost':init_population['h_balance_cost'][tmp],
+        'concentration_cost':init_population['concentration_cost'][tmp],
         'migration_time_cost': init_population['migration_time_cost'][tmp]
         }
 
     # 初设的全局精英解能耗代价、负载均衡指数、迁移时间
     elite_cost = {
         'power': 9999.9*num_var,
-        'h_balance': 9999.9*num_var,
+        'concentration': 9999.9*num_var,
         'migration_time': time_base*num_var
         }
 
     # 保存每一次迭代后的全局最优解，与全局最优解每次迭代后对比，当2者值不同则打印，并被赋为最新全局最优解
-    save_elite_cost = {'power': 0, 'h_balance': 0, 'migration_time': 0}
+    save_elite_cost = {'power': 0, 'concentration': 0, 'migration_time': 0}
     time0 = time.time()
 
     # 设置最大迭代次数
@@ -518,11 +541,12 @@ def main(generation, size, num_var, p, hsi_list, rp, rm, v_p_cost, v_m_cost):
                 break
         if flag:
             elite_cost['power'] = init_population['elite_power']
+            elite_cost['concentration'] = init_population['elite_concentration']
             elite_cost['h_balance'] = init_population['elite_h_balance']
             elite_cost['migration_time'] = init_population['elite_migration_time']
 
         # 展示改变后的全局最优解
-        if save_elite_cost['power'] != elite_cost['power'] or save_elite_cost['h_balance'] != elite_cost['h_balance'] or save_elite_cost['migration_time'] != elite_cost['migration_time']:    # 每一代全局最优解有变化时才会记录并打印
+        if save_elite_cost['power'] != elite_cost['power'] or save_elite_cost['concentration'] != elite_cost['concentration'] or save_elite_cost['migration_time'] != elite_cost['migration_time']:    # 每一代全局最优解有变化时才会记录并打印
             print elite_cost
             save_elite_cost = copy.deepcopy(elite_cost)
 
@@ -530,7 +554,7 @@ def main(generation, size, num_var, p, hsi_list, rp, rm, v_p_cost, v_m_cost):
     # 计算初始随机解、及最终保留下来的所有迭代次数中最优解，其各项真实代价
     before_cost = compute_true_cost(save_chrom, rp, rm, v_p_cost, v_m_cost)
     after_costs = compute_true_cost(init_population['elite_chrom'], rp, rm, v_p_cost, v_m_cost)
-    return after_costs
+    return after_costs, init_population['elite_chrom']
 
 if __name__ == '__main__':
     '''

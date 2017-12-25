@@ -74,3 +74,14 @@
 !!!!!! 以上说明 detect_hm_independence()方法的独立性修复是有问题的
 
 ----------------------------------------------------------------------------------------------------------
+
+3层mbbo聚合  cost1={'power_cost': 17553.664976098462, 'tolerance': 0.0, 'degree_of_concentration': 3652.84851919138, 'used_hms': 40}
+ 2层mbbo聚合 cost0={'used_hms': 65, 'v_balance_cost': 12.43134080946998, 'h_balance_cost': 13.056597091623905, 'h_average_load_index': 5.612706223696605, 'v_average_load_index': 4.99520247635963, 'power_cost': 29169.605704759975, 'tolerance': 0.0, 'degree_of_concentration': 6155.072132955545}
+3层mbbo聚合  cost1={'power_cost': 17096.58050923681, 'tolerance': 0.0, 'degree_of_concentration': 3643.420914074566, 'used_hms': 43}
+ 2层mbbo聚合 cost0={'used_hms': 65, 'v_balance_cost': 4.302914127279199, 'h_balance_cost': 22.890111531314698, 'h_average_load_index': 6.674756375095161, 'v_average_load_index': 3.3661205560408183, 'power_cost': 29162.318850846048, 'tolerance': 0.0, 'degree_of_concentration': 6144.309262959995}
+3层mbbo聚合  cost1={'power_cost': 16184.889123554183, 'tolerance': 0.0, 'degree_of_concentration': 3453.040811404254, 'used_hms': 42}
+ 2层mbbo聚合 cost0={'used_hms': 57, 'v_balance_cost': 11.032918259359192, 'h_balance_cost': 11.562691829363354, 'h_average_load_index': 6.125761918900966, 'v_average_load_index': 5.397090961635295, 'power_cost': 25585.37155306984, 'tolerance': 0.0, 'degree_of_concentration': 5409.715596631251}
+3层mbbo聚合  cost1={'power_cost': 18433.93375095322, 'tolerance': 0.0, 'degree_of_concentration': 3926.3748633982023, 'used_hms': 46}
+ 2层mbbo聚合 cost0={'used_hms': 70, 'v_balance_cost': 3.3210722648651143, 'h_balance_cost': 3.503056156538343, 'h_average_load_index': 3.6253390964600816, 'v_average_load_index': 3.236602447499034, 'power_cost': 31402.362842639166, 'tolerance': 0.0, 'degree_of_concentration': 6616.832625345557}
+3层mbbo聚合  cost1={'power_cost': 16631.09799362558, 'tolerance': 0.0, 'degree_of_concentration': 3554.3355712557977, 'used_hms': 42}
+ 2层mbbo聚合 cost0={'used_hms': 60, 'v_balance_cost': 5.078323213978832, 'h_balance_cost': 5.298558835881236, 'h_average_load_index': 3.8327561504027807, 'v_average_load_index': 3.4495407368775846, 'power_cost': 26909.066491173413, 'tolerance': 0.0, 'degree_of_concentration': 5642.558820194327}
