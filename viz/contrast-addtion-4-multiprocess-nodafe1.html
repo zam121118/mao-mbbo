@@ -1,3 +1,4 @@
+<!-- 模拟持续新增时，工业实现与基于BFD算法的Docker、VM初始放置方法各阶段使用的 HMs数量 -->
 <!DOCTYPE html>
 <html>
     <head>
@@ -21,14 +22,20 @@
     
     option = {
         title: {
-            text: 'Docker+VM & Docker+VM+HM - based Addtion phase of Containers ',
-            subtext: 'data from experimental test',
+            text: '对比实验一',
+            subtext: 'Docker+VM+HM架构下，2种初始放置方法各阶段使用HMs数量',
             sublink: 'https://github.com/zam121118/mao-mbbo/tree/addtion',
             left: 'center',
             top: 5,
-            itemGap: 0,
+            itemGap: 6,
+            subtextStyle:{
+                color:"#000000",
+                fontWeight:"normal",
+                fontSize: 15,
+                height: 56
+            },
             textStyle: {
-                color: '#0099CC'
+                color: '#0099CE'
             },
         },
         tooltip: {
@@ -40,29 +47,29 @@
             right: 10,
             type: 'scroll',
             data:[{
-                name:'2层Binpack',
+                name:'工业实现方式',
                 icon:'circle',
                 textStyle:{
                     color:'#CC0033'
                 }
             },{
-                name:'3层Binpack',
+                name:'基于BFD的Docker、VM初始放置',
                 icon:'circle',
                 textStyle:{
                     color:'#009966'
                 }
-            },{
-                name:'容错2层Binpack',
-                icon:'circle',
-                textStyle:{
-                    color:'#6666FF'
-                }
-            },{
-                name:'容错3层Binpack',
-                icon:'circle',
-                textStyle:{
-                    color:'#336699'
-                }
+            // },{
+            //     name:'方法二资源碎片化',
+            //     icon:'circle',
+            //     textStyle:{
+            //         color:'#6666FF'
+            //     }
+            // },{
+            //     name:'方法一资源碎片化',
+            //     icon:'circle',
+            //     textStyle:{
+            //         color:'#336699'
+            //     }
             }],
             itemGap: 20,
             textStyle: {
@@ -113,42 +120,42 @@
             data: []
         },
         yAxis: {
-            name:'激活态HM数量(台)',
+            name:'HMs数量(台)',
             type: 'value'
         },
         // 设置dataRoom
-        dataZoom:[
-            {
-                type: 'slider',
-                show: true,
-                xAxisIndex: [0],
-                start: 50,
-                end: 100
-            },
-            {
-                type: 'slider',
-                show: true,
-                yAxisIndex: [0],
-                left: '93%',
-                start: 50,
-                end: 100
-            },
-            {
-                type: 'inside',
-                xAxisIndex: [0],
-                start: 50,
-                end: 100
-            },
-            {
-                type: 'inside',
-                yAxisIndex: [0],
-                start: 50,
-                end: 100
-            }
-        ],
+        // dataZoom:[
+        //     {
+        //         type: 'slider',
+        //         show: true,
+        //         xAxisIndex: [0],
+        //         start: 50,
+        //         end: 100
+        //     },
+        //     {
+        //         type: 'slider',
+        //         show: true,
+        //         yAxisIndex: [0],
+        //         left: '93%',
+        //         start: 50,
+        //         end: 100
+        //     },
+        //     {
+        //         type: 'inside',
+        //         xAxisIndex: [0],
+        //         start: 50,
+        //         end: 100
+        //     },
+        //     {
+        //         type: 'inside',
+        //         yAxisIndex: [0],
+        //         start: 50,
+        //         end: 100
+        //     }
+        // ],
         series: [
             {
-                name:'2层Binpack',
+                name:'工业实现方式',
                 type:'line',
                 lineStyle:{
                     normal:{
@@ -163,22 +170,22 @@
                 data:[]
             },
             {
-                name:'3层Binpack',
+                name:'基于BFD的Docker、VM初始放置',
                 type:'line',
                 stack: '',
                 data:[]
-            },
-            {
-                name:'容错2层Binpack',
-                type:'line',
-                stack: '',
-                data:[]
-            },
-            {
-                name:'容错3层Binpack',
-                type:'line',
-                stack: '',
-                data:[]
+            // },
+            // {
+            //     name:'方法二资源碎片化',
+            //     type:'line',
+            //     stack: '',
+            //     data:[]
+            // },
+            // {
+            //     name:'方法一资源碎片化',
+            //     type:'line',
+            //     stack: '',
+            //     data:[]
             }
         ]
     };
@@ -192,14 +199,14 @@
     // });
 
     // 异步加载数据
-    $.get('./contrast-addtion-demo1-1.json').done(function (data) {
+    $.get('./contrast-addtion-4-multiprocess-nosafe.json').done(function (data) {
         // 填入数据
         console.log("进入数据加载方法");
         datascale = data.scale;
         data2simple = data.simple;
         data3complex = data.complex;
-        data_safe2simple = data.safe_simple;
-        data_safe3complex = data.safe_complex;
+        data_safe2simple = data.concentration_simple;
+        data_safe3complex = data.concentration_complex;
         console.log(data);
         
         // 使用刚指定的配置项和数据显示图表
@@ -210,28 +217,28 @@
             data: datascale
             },
             series: [{
-                    name:'2层Binpack',
+                    name:'工业实现方式',
                     type:'line',
                     stack: '',
                     data:data2simple
                 },
                 {
-                    name:'3层Binpack',
+                    name:'基于BFD的Docker、VM初始放置',
                     type:'line',
                     stack: '',
                     data:data3complex
-                },
-                {
-                    name:'容错2层Binpack',
-                    type:'line',
-                    stack: '',
-                    data:data_safe2simple
-                },
-                {
-                    name:'容错3层Binpack',
-                    type:'line',
-                    stack: '',
-                    data:data_safe3complex
+                // },
+                // {
+                //     name:'方法二资源碎片化',
+                //     type:'line',
+                //     stack: '',
+                //     data:data_safe2simple
+                // },
+                // {
+                //     name:'方法一资源碎片化',
+                //     type:'line',
+                //     stack: '',
+                //     data:data_safe3complex
                 }]
         });
     });

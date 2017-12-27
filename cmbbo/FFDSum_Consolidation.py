@@ -776,7 +776,7 @@ def map_h2v(bins):
         map_h_v[value].append(key)
     return map_h_v
 
-def consolidation_costs(bins, num_crash, map_d_s, map_s_d, size=1):
+def consolidation_costs(bins, num_crash, map_d_s, map_s_d, flag):
     '''
     仅计算聚合放置的优化目标，即能耗与资源碎片化指数与容错能力
     以集群环境中所有running VMs/HMs作为计算对象（）
@@ -789,7 +789,7 @@ def consolidation_costs(bins, num_crash, map_d_s, map_s_d, size=1):
         'used_hms': 0,
         'tolerance': 0.0
         }
-
+    size = 1
     map_h_v = map_h2v(bins)
     map_v_p = map_v2h(bins)
     used_vms = map_v_p.keys()
@@ -818,7 +818,7 @@ def consolidation_costs(bins, num_crash, map_d_s, map_s_d, size=1):
         pass
 
         # 模拟宕机计算容错
-        cost['tolerance'] = tolerance.simulate_crash_HM(bins, num_crash, map_d_s, map_s_d)
+        cost['tolerance'] = tolerance.simulate_crash_HM(bins, num_crash, map_d_s, map_s_d, flag)
     return cost
 
 def consolidation_costs_nosafe(bins, num_crash, size=1):
@@ -948,54 +948,54 @@ if __name__ == '__main__':
     # 对比实验二  （已完成）
     # 用于d-v-h3层支持HM级容错聚合与v-h2层不支持容错聚合对比， 使用FFDSum 方法聚合
     # 由init.main_init()创建随机集群状态后生成map_d_s、map_s_d映射，用于容错计算与独立性修复检测
-    # num_crash = 20
-    # data = {
-    #     'scale' : [],
-    #     'degree_of_concentration_0':[],
-    #     'power_cost_0': [],
-    #     'used_hms_0': [],
-    #     'tolerance_0':[],
-    #     'degree_of_concentration_2':[],
-    #     'power_cost_2': [],
-    #     'used_hms_2': [],
-    #     'tolerance_2':[],
-    #     'degree_of_concentration_3':[],
-    #     'power_cost_3': [],
-    #     'used_hms_3': [],
-    #     'tolerance_3':[]
-    # }
-    # cycle = [500, 2000, 7000, 10000, 30000]
-    # for scale in cycle:
-    #     # 初始准备
-    #     init_popu0 = init.main_init(scale, 1.0)
-    #     map_d_s, map_s_d = docker2service(scale)
-    #     init_popu1 = copy.deepcopy(init_popu0)
-    #     cost0 = consolidation_costs(init_popu0, num_crash, map_d_s, map_s_d)
-    #     data['scale'].append(scale)
-    #     data['degree_of_concentration_0'].append(cost0['degree_of_concentration'])
-    #     data['power_cost_0'].append(cost0['power_cost'])
-    #     data['used_hms_0'].append(cost0['used_hms'])
-    #     data['tolerance_0'].append(cost0['tolerance'])
+    num_crash = 20
+    data = {
+        'scale' : [],
+        'degree_of_concentration_0':[],
+        'power_cost_0': [],
+        'used_hms_0': [],
+        'tolerance_0':[],
+        'degree_of_concentration_2':[],
+        'power_cost_2': [],
+        'used_hms_2': [],
+        'tolerance_2':[],
+        'degree_of_concentration_3':[],
+        'power_cost_3': [],
+        'used_hms_3': [],
+        'tolerance_3':[]
+    }
+    cycle = [500, 2000, 7000, 10000, 30000]
+    for scale in cycle:
+        # 初始准备
+        init_popu0 = init.main_init(scale, 1.0)
+        map_d_s, map_s_d = docker2service(scale)
+        init_popu1 = copy.deepcopy(init_popu0)
+        cost0 = consolidation_costs(init_popu0, num_crash, map_d_s, map_s_d, -1)
+        data['scale'].append(scale)
+        data['degree_of_concentration_0'].append(cost0['degree_of_concentration'])
+        data['power_cost_0'].append(cost0['power_cost'])
+        data['used_hms_0'].append(cost0['used_hms'])
+        data['tolerance_0'].append(cost0['tolerance'])
 
-    #     # 3层聚合与代价计算(支持HM级容错)
-    #     init_popu0  = safe_FFDSum_3_Consol(init_popu0, map_d_s, map_s_d)
-    #     cost3 = consolidation_costs(init_popu0, num_crash, map_d_s, map_s_d)
-    #     data['degree_of_concentration_3'].append(cost3['degree_of_concentration'])
-    #     data['power_cost_3'].append(cost3['power_cost'])
-    #     data['used_hms_3'].append(cost3['used_hms'])
-    #     data['tolerance_3'].append(cost3['tolerance'])      
+        # 3层聚合与代价计算(支持HM级容错)
+        init_popu0  = safe_FFDSum_3_Consol(init_popu0, map_d_s, map_s_d)
+        cost3 = consolidation_costs(init_popu0, num_crash, map_d_s, map_s_d, 0)
+        data['degree_of_concentration_3'].append(cost3['degree_of_concentration'])
+        data['power_cost_3'].append(cost3['power_cost'])
+        data['used_hms_3'].append(cost3['used_hms'])
+        data['tolerance_3'].append(cost3['tolerance'])      
         
-    #     # 2层聚合与代价计算（不支持容错）
-    #     init_popu1 = FFDSum_2_Consol(init_popu1)
-    #     cost2 = consolidation_costs(init_popu1, num_crash, map_d_s, map_s_d)
-    #     data['degree_of_concentration_2'].append(cost2['degree_of_concentration'])
-    #     data['power_cost_2'].append(cost2['power_cost'])
-    #     data['used_hms_2'].append(cost2['used_hms'])
-    #     data['tolerance_2'].append(cost2['tolerance'])
+        # 2层聚合与代价计算（不支持容错）
+        init_popu1 = FFDSum_2_Consol(init_popu1)
+        cost2 = consolidation_costs(init_popu1, num_crash, map_d_s, map_s_d, -1)
+        data['degree_of_concentration_2'].append(cost2['degree_of_concentration'])
+        data['power_cost_2'].append(cost2['power_cost'])
+        data['used_hms_2'].append(cost2['used_hms'])
+        data['tolerance_2'].append(cost2['tolerance'])
 
-    # with open('.//viz//ffdsum-consolidation-2&3-safe-demo.json','a') as f:
-    #     f.flush()
-    #     json.dump(data, f, indent=2)
+        with open('.//viz//ffdsum-consolidation-2&3-safe-demo.json','w') as f:
+            f.flush()
+            json.dump(data, f, indent=2)
 
 
 
@@ -1048,53 +1048,53 @@ if __name__ == '__main__':
 
 
 
-    # 用于d-v-h3层架构下,FFDSum与mbbo聚合结果对比（不支持容错）
-    gen = 100000
-    num_crash = 20
-    data = {
-        'scale' : [],
-        'degree_of_concentration_0':[],
-        'power_cost_0': [],
-        'used_hms_0': [],
-        'degree_of_concentration_ffd':[],
-        'power_cost_ffd': [],
-        'used_hms_ffd': [],
-        'degree_of_concentration_mbbo':[],
-        'power_cost_mbbo': [],
-        'used_hms_mbbo': []
-    }
-    cycle = [10000, 30000, 50000]
-    for scale in cycle:
-        # 初始准备
-        init_popu0 = init.main_init(scale, 1.0)
-        rp, rm, v_p_cost, v_m_cost = for_vm_mbbo(init_popu0)
-        c_rp, c_rm = init_popu0['c_rp'], init_popu0['c_rm']
-        rp1, rm1 = copy.deepcopy(rp), copy.deepcopy(rm)
+    # # 用于d-v-h3层架构下,FFDSum与mbbo聚合结果对比（不支持容错）
+    # gen = 100000
+    # num_crash = 20
+    # data = {
+    #     'scale' : [],
+    #     'degree_of_concentration_0':[],
+    #     'power_cost_0': [],
+    #     'used_hms_0': [],
+    #     'degree_of_concentration_ffd':[],
+    #     'power_cost_ffd': [],
+    #     'used_hms_ffd': [],
+    #     'degree_of_concentration_mbbo':[],
+    #     'power_cost_mbbo': [],
+    #     'used_hms_mbbo': []
+    # }
+    # cycle = [10000, 30000, 50000]
+    # for scale in cycle:
+    #     # 初始准备
+    #     init_popu0 = init.main_init(scale, 1.0)
+    #     rp, rm, v_p_cost, v_m_cost = for_vm_mbbo(init_popu0)
+    #     c_rp, c_rm = init_popu0['c_rp'], init_popu0['c_rm']
+    #     rp1, rm1 = copy.deepcopy(rp), copy.deepcopy(rm)
 
-        # 聚合前的各项代价
-        cost0 = consolidation_costs_nosafe(init_popu0, 0)
-        data['scale'].append(scale)
-        data['degree_of_concentration_0'].append(cost0['degree_of_concentration'])
-        data['power_cost_0'].append(cost0['power_cost'])
-        data['used_hms_0'].append(cost0['used_hms'])
+    #     # 聚合前的各项代价
+    #     cost0 = consolidation_costs_nosafe(init_popu0, 0)
+    #     data['scale'].append(scale)
+    #     data['degree_of_concentration_0'].append(cost0['degree_of_concentration'])
+    #     data['power_cost_0'].append(cost0['power_cost'])
+    #     data['used_hms_0'].append(cost0['used_hms'])
 
 
-        # FFDSum聚合方法(不容错)
-        init_popu0  = FFDSum_3_Consol(init_popu0)
-        cost2 = consolidation_costs_nosafe(init_popu0, 0)
-        data['degree_of_concentration_ffd'].append(cost2['degree_of_concentration'])
-        data['power_cost_ffd'].append(cost2['power_cost'])
-        data['used_hms_ffd'].append(cost2['used_hms'])
+    #     # FFDSum聚合方法(不容错)
+    #     init_popu0  = FFDSum_3_Consol(init_popu0)
+    #     cost2 = consolidation_costs_nosafe(init_popu0, 0)
+    #     data['degree_of_concentration_ffd'].append(cost2['degree_of_concentration'])
+    #     data['power_cost_ffd'].append(cost2['power_cost'])
+    #     data['used_hms_ffd'].append(cost2['used_hms'])
 
-        # MBBO聚合方法（不容错）
-        cost3, elite_chrom3  = doc_mbbo.main(gen, 5, scale, 1.0, ['power'], rp1, rm1, c_rp, c_rm)
-        data['degree_of_concentration_mbbo'].append(cost3['degree_of_concentration'])
-        data['power_cost_mbbo'].append(cost3['power_cost'])
-        data['used_hms_mbbo'].append(cost3['used_hms'])
+    #     # MBBO聚合方法（不容错）
+    #     cost3, elite_chrom3  = doc_mbbo.main(gen, 5, scale, 1.0, ['power'], rp1, rm1, c_rp, c_rm)
+    #     data['degree_of_concentration_mbbo'].append(cost3['degree_of_concentration'])
+    #     data['power_cost_mbbo'].append(cost3['power_cost'])
+    #     data['used_hms_mbbo'].append(cost3['used_hms'])
 
-        with open('.//viz//consolidation-mbbo-ffd-no-safe-demo.json','a') as f:
-            f.flush()
-            json.dump(data, f, indent=2)
+    #     with open('.//viz//consolidation-mbbo-ffd-no-safe-demo.json','a') as f:
+    #         f.flush()
+    #         json.dump(data, f, indent=2)
 
 
 
@@ -1135,7 +1135,7 @@ if __name__ == '__main__':
 
     #     # FFDSum聚合方法(支持容错)
     #     init_popu0  = safe_FFDSum_3_Consol(init_popu0, map_d_s, map_s_d)
-    #     cost2 = consolidation_costs(init_popu0, num_crash, map_d_s, map_s_d)
+    #     cost2 = consolidation_costs(init_popu0, num_crash, map_d_s, map_s_d, 0)
     #     data['degree_of_concentration_ffd'].append(cost2['degree_of_concentration'])
     #     data['power_cost_ffd'].append(cost2['power_cost'])
     #     data['used_hms_ffd'].append(cost2['used_hms'])
@@ -1146,7 +1146,7 @@ if __name__ == '__main__':
     #     data['degree_of_concentration_mbbo'].append(cost3['degree_of_concentration'])
     #     data['power_cost_mbbo'].append(cost3['power_cost'])
     #     data['used_hms_mbbo'].append(cost3['used_hms'])
-    #     tolerance_3 = tolerance.simulate_crash_HM(bins, num_crash, map_d_s, map_s_d)
+    #     tolerance_3 = tolerance.simulate_crash_HM(bins, num_crash, map_d_s, map_s_d, 0)
     #     data['tolerance_mbbo'].append(tolerance_3)
 
     #     with open('.//viz//consolidation-mbbo-ffd-no-safe-demo.json','a') as f:

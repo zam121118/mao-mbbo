@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 #-*- coding:utf-8 -*-
 '''
+2017-12-27  此模块有问题，待修改
 2017-12-21  更新:
     此模块用于新增阶段以VM为节点独立性和以HM为节点独立性理论性下,模拟容器多批量新增过程,
     使用p_crash模拟数据中心HM宕机选中概率下,不同放置方案的集群服务容错指数。
@@ -433,7 +434,7 @@ if __name__=='__main__':
     init_popu0 = main_init(max_suffix+1, 1.0)
     init_popu1 = copy.deepcopy(init_popu0)
     cycle = []
-    for i in xrange(1, 6):
+    for i in xrange(1, 5):
         a = 10 ** i
         ll = sorted(random.sample(range(1,10), 4))
         for j in ll:
