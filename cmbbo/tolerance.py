@@ -40,7 +40,7 @@ def find_docker_onHM(bins, vhm, label):
     elif label == 1:
         return dockers_onVM
 
-def simulate_crash_HM(bins, num_crash, map_d_s, map_s_d):
+def simulate_crash_HM(bins, num_crash, map_d_s, map_s_d, flag):
     '''
     2017-12-24 为了聚合阶段新写的。
         对于集群中all active HMs，指定随机挑选num_crash个HM为被摧毁对象。
@@ -67,16 +67,27 @@ def simulate_crash_HM(bins, num_crash, map_d_s, map_s_d):
             if service not in crash_services:
                 # 确认该服务所有对应的replicas及其所在HM下标
                 replicas = map_s_d[service]
+                if len(replicas) == 0:
+                    continue
+                    #sys.exit()
                 replicas_hms = [bins['population'][0][i][-1] for i in replicas]
+                # 对于仅有一个支撑容器的服务默认为其用户未指定高可用
                 print "服务 {} 的实际运行HM为 {}".format(service, replicas_hms)
                 dangerous_num = 0
                 # 统计该服务所有replicas实际HMs有多少被hm_crash选中(至少为1,即该h号HM)
                 for x in hms_crash:
                     if x in replicas_hms:
-                        dangerous_num += replicas_hms.count(x)
+                        if flag == 0:
+                            dangerous_num += 1
+                        elif flag == 1:
+                            dangerous_num += replicas_hms.count(x)
+                        else:
+                            dangerous_num += (replicas_hms.count(x)+random.randint(0,2))
                 print "服务 {} 有 {} 个容器处于危险中".format(service, dangerous_num)
                 safe_num = len(replicas_hms) - dangerous_num
-                if safe_num < 1:
+                if safe_num < 0:
+                    safe_num == 0
+                elif safe_num < 1:
                     N_severity += 1
                 elif safe_num < 2 and safe_num >= 1:
                     N_medium += 1
@@ -84,7 +95,7 @@ def simulate_crash_HM(bins, num_crash, map_d_s, map_s_d):
                     N_mild += 1
                 crash_services[service] = [dangerous_num, safe_num]
     # 计算方案容错能力
-    tolerance = 100 * N_severity + 3 * N_medium + N_mild
+    tolerance = 10000 * N_severity + 2 * N_medium + 0.1 * N_mild
     print crash_services
     return tolerance
 

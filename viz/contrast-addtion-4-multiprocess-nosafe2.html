@@ -1,0 +1,248 @@
+<!-- 模拟持续新增时，工业实现与基于BFD算法的Docker、VM初始放置方法各阶段使用 资源碎片化 -->
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>Contrast of docker scheduler strategies</title>
+        <!-- 引入 ECharts 文件 -->
+    <script type="text/javascript" src="./static/lib/echarts/3.8.4/echarts.min.js"></script>
+    <script type="text/javascript" src="./static/lib/echarts/3.8.4/dark.js"></script>
+    <!--引入jQuery用于异步数据导入-->
+    <script type="text/javascript" src="./static/lib/jquery/jquery-2.1.1.js"></script>
+    <link rel="stylesheet" href="./static/lib/jqueryui/humanlity/jquery-ui.css">
+    <link rel="stylesheet" href="./static/lib/font-awesome/4.7.0/css/font-awesome.css">
+</head>
+<body>
+    <!--初始化一个DOM-->
+    <div id="main" style="width:1550px; height: 755px;"></div>
+    <script type="text/javascript">
+
+    // 基于准备好的dom,初始化echarts实例
+    var myChart = echarts.init(document.getElementById('main'));
+    
+    option = {
+        title: {
+            text: '对比实验一',
+            subtext: 'Docker+VM+HM架构下，2种初始放置方法各阶段对应资源碎片化度',
+            sublink: 'https://github.com/zam121118/mao-mbbo/tree/addtion',
+            left: 'center',
+            top: 5,
+            itemGap: 6,
+            subtextStyle:{
+                color:"#000000",
+                fontWeight:"normal",
+                fontSize: 15,
+                height: 56
+            },
+            textStyle: {
+                color: '#0099CE'
+            },
+        },
+        tooltip: {
+            trigger: 'axis'
+        },
+        legend: {
+            //bottom: 30,
+            top: 50,
+            right: 10,
+            type: 'scroll',
+            data:[{
+                name:'工业实现方式',
+                icon:'circle',
+                textStyle:{
+                    color:'#CC0033'
+                }
+            },{
+                name:'基于BFD的Docker、VM初始放置',
+                icon:'circle',
+                textStyle:{
+                    color:'#009966'
+                }
+            // },{
+            //     name:'方法二资源碎片化',
+            //     icon:'circle',
+            //     textStyle:{
+            //         color:'#6666FF'
+            //     }
+            // },{
+            //     name:'方法一资源碎片化',
+            //     icon:'circle',
+            //     textStyle:{
+            //         color:'#336699'
+            //     }
+            }],
+            itemGap: 20,
+            textStyle: {
+                color: '#fff',
+                fontStyle: 'italic',
+                fontSize: 20
+            }
+        },
+        grid: {
+            left: '3%',
+            right: '4%',
+            bottom: '3%',
+            containLabel: true
+        },
+        toolbox: {
+            feature: {
+                saveAsImage: {}
+            }
+        },
+        // 数据视觉化会和legend颜色冲突
+        // visualMap: {
+        //     type: 'continuous',
+        //     show: true, //false,
+        //     // min: 0,
+        //     // max: 300000,
+        //     // pieces 自定义分段区间
+        //     pieces: [
+        //         {gt: 10000},            // (1500, Infinity]
+        //         {gt: 5000, lte: 10000},  // (900, 1500]
+        //         {gt: 500, lte: 5000},  // (310, 1000]
+        //         {gt: 200, lte: 500},   // (200, 300]
+        //         {gt: 100, lte: 200},       // (10, 200]
+        //         {lt: 100}                 // (-Infinity, 100)
+        //     ],
+        //     //splitNumber: 5,
+        //     dimension: 2,
+        //     hoverLink: true,
+        //     color: ['#d94e5d','#eac736','#50a3ba'],
+        //     // selectedMode: 'multiple',
+        //     textStyle: {
+        //         color: '#fff'
+        //     }
+        // },
+        xAxis: {
+            type: 'category',
+            name:'总容器数量(个)',
+            boundaryGap: true,//false
+            data: []
+        },
+        yAxis: {
+            name:'资源碎片化度',
+            type: 'value'
+        },
+        // 设置dataRoom
+        // dataZoom:[
+        //     {
+        //         type: 'slider',
+        //         show: true,
+        //         xAxisIndex: [0],
+        //         start: 50,
+        //         end: 100
+        //     },
+        //     {
+        //         type: 'slider',
+        //         show: true,
+        //         yAxisIndex: [0],
+        //         left: '93%',
+        //         start: 50,
+        //         end: 100
+        //     },
+        //     {
+        //         type: 'inside',
+        //         xAxisIndex: [0],
+        //         start: 50,
+        //         end: 100
+        //     },
+        //     {
+        //         type: 'inside',
+        //         yAxisIndex: [0],
+        //         start: 50,
+        //         end: 100
+        //     }
+        // ],
+        series: [
+            {
+                name:'工业实现方式',
+                type:'line',
+                lineStyle:{
+                    normal:{
+                        width: 3,
+                        type: 'solid'//dotted、dashed
+                        //shadowColor: 'rgba(0, 0, 0, 0.5)',
+                        //shadowBlur: 10,
+                        //opacity: 1
+                    }
+                },
+                stack: '',
+                data:[]
+            },
+            {
+                name:'基于BFD的Docker、VM初始放置',
+                type:'line',
+                stack: '',
+                data:[]
+            // },
+            // {
+            //     name:'方法二资源碎片化',
+            //     type:'line',
+            //     stack: '',
+            //     data:[]
+            // },
+            // {
+            //     name:'方法一资源碎片化',
+            //     type:'line',
+            //     stack: '',
+            //     data:[]
+            }
+        ]
+    };
+    
+    // 先设置完其它的样式，显示一个空的直角坐标轴，然后获取数据后填入数据
+    // 显示标题、图例和坐标轴
+    myChart.setOption(option);
+
+    // myChart.on('click', function(param) {
+    //     console.log(param);
+    // });
+
+    // 异步加载数据
+    $.get('./contrast-addtion-4-multiprocess-nosafe.json').done(function (data) {
+        // 填入数据
+        console.log("进入数据加载方法");
+        datascale = data.scale;
+        data2simple = data.simple;
+        data3complex = data.complex;
+        data_safe2simple = data.concentration_simple;
+        data_safe3complex = data.concentration_complex;
+        console.log(data);
+        
+        // 使用刚指定的配置项和数据显示图表
+        myChart.setOption({
+            xAxis: {
+            type: 'category',
+            boundaryGap: true,//false
+            data: datascale
+            },
+            series: [{
+                    name:'工业实现方式',
+                    type:'line',
+                    stack: '',
+                    data:data_safe2simple
+                },
+                {
+                    name:'基于BFD的Docker、VM初始放置',
+                    type:'line',
+                    stack: '',
+                    data:data_safe3complex
+                // },
+                // {
+                //     name:'方法二资源碎片化',
+                //     type:'line',
+                //     stack: '',
+                //     data:data_safe2simple
+                // },
+                // {
+                //     name:'方法一资源碎片化',
+                //     type:'line',
+                //     stack: '',
+                //     data:data_safe3complex
+                }]
+        });
+    });
+
+    </script>
+</body>
+</html>
