@@ -1,0 +1,41 @@
+{
+  "tolerance_mbbo": [
+    266
+  ], 
+  "power_cost_ffd": [
+    344784.58597901836
+  ], 
+  "tolerance_ffd": [
+    367
+  ], 
+  "power_cost_0": [
+    607449.2560921991
+  ], 
+  "scale": [
+    2000
+  ], 
+  "degree_of_concentration_ffd": [
+    75240.30400432678
+  ], 
+  "used_hms_mbbo": [
+    978
+  ], 
+  "tolerance_0": [
+    129
+  ], 
+  "degree_of_concentration_0": [
+    127741.59433708292
+  ], 
+  "used_hms_0": [
+    1354
+  ], 
+  "power_cost_mbbo": [
+    407577.64110267116
+  ], 
+  "degree_of_concentration_mbbo": [
+    85622.15317389747
+  ], 
+  "used_hms_ffd": [
+    766
+  ]
+}

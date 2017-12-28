@@ -309,11 +309,11 @@ def safe_doc_mbbo(gen, size, scale, p, hsi_list, v_rp, v_rm, c_rp, c_rm, map_d_s
         'c_rm': c_rm,                                             # 每个容器的mem请求
         'v_rp': v_rp,                                             # 每个vm的cpu请求
         'v_rm': v_rm,                                             # 每个vm的mem请求
-        'population': range2rect(size, num_var, [0, 0]),          # size个chrom，每个chrom有num_var个双元素list[vm,hm]对应每个容器放置的vm编号和物理机编号
-        'v_p_cost': range2rect(size, num_var, 0.0),               # size个num_var长list记录每个vm上所有容器的cpu总请求,初始为0
-        'v_m_cost': range2rect(size, num_var, 0.0),               # 每个vm被容器请求的mem，初始为0
-        'h_p_cost': range2rect(size, num_var, 0.0),               # 每个HM被请求的cpu，初始为0
-        'h_m_cost': range2rect(size, num_var, 0.0),               # HM被请求的mem，初始为0
+        'population': init.range2rect(size, scale, [0, 0]),          # size个chrom，每个chrom有num_var个双元素list[vm,hm]对应每个容器放置的vm编号和物理机编号
+        'v_p_cost': init.range2rect(size, scale, 0.0),               # size个num_var长list记录每个vm上所有容器的cpu总请求,初始为0
+        'v_m_cost': init.range2rect(size, scale, 0.0),               # 每个vm被容器请求的mem，初始为0
+        'h_p_cost': init.range2rect(size, scale, 0.0),               # 每个HM被请求的cpu，初始为0
+        'h_m_cost': init.range2rect(size, scale, 0.0),               # HM被请求的mem，初始为0
         'map_v_h': {}                                             # vm到hm的映射关系
     }
     bins['population'][0] = copy.deepcopy(elite_chrom)
@@ -1049,56 +1049,6 @@ if __name__ == '__main__':
 
 
     # 用于d-v-h3层架构下,FFDSum与mbbo聚合结果对比（不支持容错）
-    gen = 100000
-    num_crash = 20
-    data = {
-        'scale' : [],
-        'degree_of_concentration_0':[],
-        'power_cost_0': [],
-        'used_hms_0': [],
-        'degree_of_concentration_ffd':[],
-        'power_cost_ffd': [],
-        'used_hms_ffd': [],
-        'degree_of_concentration_mbbo':[],
-        'power_cost_mbbo': [],
-        'used_hms_mbbo': []
-    }
-    cycle = [10000, 30000, 50000]
-    for scale in cycle:
-        # 初始准备
-        init_popu0 = init.main_init(scale, 1.0)
-        rp, rm, v_p_cost, v_m_cost = for_vm_mbbo(init_popu0)
-        c_rp, c_rm = init_popu0['c_rp'], init_popu0['c_rm']
-        rp1, rm1 = copy.deepcopy(rp), copy.deepcopy(rm)
-
-        # 聚合前的各项代价
-        cost0 = consolidation_costs_nosafe(init_popu0, 0)
-        data['scale'].append(scale)
-        data['degree_of_concentration_0'].append(cost0['degree_of_concentration'])
-        data['power_cost_0'].append(cost0['power_cost'])
-        data['used_hms_0'].append(cost0['used_hms'])
-
-
-        # FFDSum聚合方法(不容错)
-        init_popu0  = FFDSum_3_Consol(init_popu0)
-        cost2 = consolidation_costs_nosafe(init_popu0, 0)
-        data['degree_of_concentration_ffd'].append(cost2['degree_of_concentration'])
-        data['power_cost_ffd'].append(cost2['power_cost'])
-        data['used_hms_ffd'].append(cost2['used_hms'])
-
-        # MBBO聚合方法（不容错）
-        cost3, elite_chrom3  = doc_mbbo.main(gen, 5, scale, 1.0, ['power'], rp1, rm1, c_rp, c_rm)
-        data['degree_of_concentration_mbbo'].append(cost3['degree_of_concentration'])
-        data['power_cost_mbbo'].append(cost3['power_cost'])
-        data['used_hms_mbbo'].append(cost3['used_hms'])
-
-        with open('.//viz//consolidation-mbbo-ffd-no-safe-demo.json','a') as f:
-            f.flush()
-            json.dump(data, f, indent=2)
-
-
-
-    # 3层架构下mbbo与FFDSum的聚合对比（支持容错）--------- 明天进行测试计算
     # gen = 10000
     # num_crash = 20
     # data = {
@@ -1106,52 +1056,102 @@ if __name__ == '__main__':
     #     'degree_of_concentration_0':[],
     #     'power_cost_0': [],
     #     'used_hms_0': [],
-    #     'tolerance_0': [],
     #     'degree_of_concentration_ffd':[],
     #     'power_cost_ffd': [],
     #     'used_hms_ffd': [],
-    #     'tolerance_ffd': [],
     #     'degree_of_concentration_mbbo':[],
     #     'power_cost_mbbo': [],
-    #     'used_hms_mbbo': [],
-    #     'tolerance_mbbo': []
+    #     'used_hms_mbbo': []
     # }
-    # cycle = [100, 500, 2000, 7000, 10000, 30000]
+    # cycle = [10000, 30000, 50000]
     # for scale in cycle:
     #     # 初始准备
     #     init_popu0 = init.main_init(scale, 1.0)
-    #     map_d_s, map_s_d = docker2service(scale)
     #     rp, rm, v_p_cost, v_m_cost = for_vm_mbbo(init_popu0)
     #     c_rp, c_rm = init_popu0['c_rp'], init_popu0['c_rm']
     #     rp1, rm1 = copy.deepcopy(rp), copy.deepcopy(rm)
 
     #     # 聚合前的各项代价
-    #     cost0 = consolidation_costs(init_popu0, 0)
+    #     cost0 = consolidation_costs_nosafe(init_popu0, 0)
     #     data['scale'].append(scale)
     #     data['degree_of_concentration_0'].append(cost0['degree_of_concentration'])
     #     data['power_cost_0'].append(cost0['power_cost'])
     #     data['used_hms_0'].append(cost0['used_hms'])
-    #     data['tolerance_0'].append(cost0['tolerance'])
 
-    #     # FFDSum聚合方法(支持容错)
-    #     init_popu0  = safe_FFDSum_3_Consol(init_popu0, map_d_s, map_s_d)
-    #     cost2 = consolidation_costs(init_popu0, num_crash, map_d_s, map_s_d)
+
+    #     # FFDSum聚合方法(不容错)
+    #     init_popu0  = FFDSum_3_Consol(init_popu0)
+    #     cost2 = consolidation_costs_nosafe(init_popu0, 0)
     #     data['degree_of_concentration_ffd'].append(cost2['degree_of_concentration'])
     #     data['power_cost_ffd'].append(cost2['power_cost'])
     #     data['used_hms_ffd'].append(cost2['used_hms'])
-    #     data['tolerance_ffd'].append(cost2['tolerance'])
 
-    #     # MBBO聚合方法（支持容错）
-    #     cost3, bins = safe_doc_mbbo(gen, 5, scale, 1.0, ['power'], rp1, rm1, c_rp, c_rm, map_d_s, map_s_d)
+    #     # MBBO聚合方法（不容错）
+    #     cost3, elite_chrom3  = doc_mbbo.main(gen, 5, scale, 1.0, ['power'], rp1, rm1, c_rp, c_rm)
     #     data['degree_of_concentration_mbbo'].append(cost3['degree_of_concentration'])
     #     data['power_cost_mbbo'].append(cost3['power_cost'])
     #     data['used_hms_mbbo'].append(cost3['used_hms'])
-    #     tolerance_3 = tolerance.simulate_crash_HM(bins, num_crash, map_d_s, map_s_d)
-    #     data['tolerance_mbbo'].append(tolerance_3)
 
     #     with open('.//viz//consolidation-mbbo-ffd-no-safe-demo.json','a') as f:
     #         f.flush()
     #         json.dump(data, f, indent=2)
+
+
+
+    # 3层架构下mbbo与FFDSum的聚合对比（支持容错）--------- 明天进行测试计算
+    gen = 10000
+    num_crash = 20
+    data = {
+        'scale' : [],
+        'degree_of_concentration_0':[],
+        'power_cost_0': [],
+        'used_hms_0': [],
+        'tolerance_0': [],
+        'degree_of_concentration_ffd':[],
+        'power_cost_ffd': [],
+        'used_hms_ffd': [],
+        'tolerance_ffd': [],
+        'degree_of_concentration_mbbo':[],
+        'power_cost_mbbo': [],
+        'used_hms_mbbo': [],
+        'tolerance_mbbo': []
+    }
+    cycle = [2000, 7000, 10000, 30000]
+    for scale in cycle:
+        # 初始准备
+        init_popu0 = init.main_init(scale, 1.0)
+        map_d_s, map_s_d = docker2service(scale)
+        rp, rm, v_p_cost, v_m_cost = for_vm_mbbo(init_popu0)
+        c_rp, c_rm = init_popu0['c_rp'], init_popu0['c_rm']
+        rp1, rm1 = copy.deepcopy(rp), copy.deepcopy(rm)
+
+        # 聚合前的各项代价
+        cost0 = consolidation_costs(init_popu0, num_crash, map_d_s, map_s_d)
+        data['scale'].append(scale)
+        data['degree_of_concentration_0'].append(cost0['degree_of_concentration'])
+        data['power_cost_0'].append(cost0['power_cost'])
+        data['used_hms_0'].append(cost0['used_hms'])
+        data['tolerance_0'].append(cost0['tolerance'])
+
+        # FFDSum聚合方法(支持容错)
+        init_popu0  = safe_FFDSum_3_Consol(init_popu0, map_d_s, map_s_d)
+        cost2 = consolidation_costs(init_popu0, num_crash, map_d_s, map_s_d)
+        data['degree_of_concentration_ffd'].append(cost2['degree_of_concentration'])
+        data['power_cost_ffd'].append(cost2['power_cost'])
+        data['used_hms_ffd'].append(cost2['used_hms'])
+        data['tolerance_ffd'].append(cost2['tolerance'])
+
+        # MBBO聚合方法（支持容错）
+        cost3, bins = safe_doc_mbbo(gen, 5, scale, 1.0, ['power'], rp1, rm1, c_rp, c_rm, map_d_s, map_s_d)
+        data['degree_of_concentration_mbbo'].append(cost3['degree_of_concentration'])
+        data['power_cost_mbbo'].append(cost3['power_cost'])
+        data['used_hms_mbbo'].append(cost3['used_hms'])
+        tolerance_3 = tolerance.simulate_crash_HM(bins, num_crash, map_d_s, map_s_d)
+        data['tolerance_mbbo'].append(tolerance_3)
+
+        with open('.//viz//consolidation-mbbo-ffd-safe-demo.json','a') as f:
+            f.flush()
+            json.dump(data, f, indent=2)
 
 
 

@@ -22,7 +22,7 @@ Change: 2017-12-2
     4. 在集群处于接纳容器新增需求的阶段时，使用的放置策略在进行资源约束检测以及对Objects(vm/hm)打分时，不应仅针对running VMs/HMs打分，
     考虑到新增时集群不能保证时时刻刻均有足够VMs或者HMs容纳下新增dockers，所以集群有编号的VMs/HMs均应被打分，
     当然不同的算法侧重点不同，打分偏向于选择running VMs/HMs还是启用新VMs/HMs也会不同；
-    5. （还未做）因为考虑到docker微服务编排调度器必须具有的容错能力，再对所有容器及其replicas安排好place后，
+    5. 因为考虑到docker微服务编排调度器必须具有的容错能力，再对所有容器及其replicas安排好place后，
     必须实行independence检测，同一服务的多个replicas不可位于同一Node(此处应为VM),所以采用BFD微调策略在该主机多VM间进行选择性
     换出与纳新。
 
