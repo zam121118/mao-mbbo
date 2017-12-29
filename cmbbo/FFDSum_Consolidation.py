@@ -1101,7 +1101,7 @@ if __name__ == '__main__':
 
 
 
-    # 2017-12-28 在宿舍小黑电脑运行
+    # 2017-12-29 由宿舍小黑电脑运行改为运行在167上
     # 3层架构下mbbo与FFDSum的聚合对比（支持容错）
     gen = 100000
     num_crash = 20
@@ -1120,7 +1120,7 @@ if __name__ == '__main__':
         'used_hms_mbbo': [],
         'tolerance_mbbo': []
     }
-    cycle = [2000, 7000]#, 10000, 30000]
+    cycle = [10000, 30000, 50000]
     for scale in cycle:
         # 初始准备
         init_popu0 = init.main_init(scale, 1.0)
