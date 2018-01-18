@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 #-*- coding:utf-8 -*-
 '''
-Date : 2017-12-27
+Date : 2017-12-17
 @Author : Amy
-Goal : 6进程并行计算   (对比指标   资源碎片化程度、 容错度)
-       1. 对比支持容错的FFDSum_complex与不支持容错的FFDSum_complex
-       2. 对比支持容错的FFDSum_complex与不支持容错的FFDSum_simple
+Goal : 分别以docker/VM，docker/HM作为资源利用率排序准则，对比同时使用FFDSum时的最终结果，并存于Result_Contrast.py
+Digest : 分别定义2种FFDSum算法：
+      一种在新容器到来时，模拟openstack向swarm提供当前VMs尺寸，由swarm自行选择放入，若无新的VM，则由openstack新建，并返回（v,h）给容器层；
+      另一种则由swarm进行全局资源的管控，以docker作为真正的负载，首先针对各个HM打分再以其上各个VM打分，若要新建VM则以打分放入；
+2017-12-20 更新: 使用多线程multiprocessing中多进行与共享变量的方式Gen次重复实验取均值
 '''
 
 
@@ -133,7 +135,7 @@ def FFDSum_complex(bins, objects):
     num = set(bins['map_v_h'].values())
     used_time = time.time() - time0
     # print "Complex used time is {} \n used the number of HMs is {}".format(used_time, len(num))
-    return bins
+    return (bins, used_time)
 
 def weightVMBins_complex(bins, object_CPU, object_MEM):
     '''
@@ -300,7 +302,7 @@ def FFDSum_simple(bins, objects):
     num = set(bins['map_v_h'].values())
     used_time = time.time() - time0
     # print "Simple used time is {} \n used the number of HMs is {}".format(used_time, len(num))
-    return bins
+    return (bins, used_time)
 
 def weightVMBins_simple(bins, object_CPU, object_MEM):
     '''
@@ -586,14 +588,13 @@ def compute_costs(bins, size=1):
     cost = {
         'degree_of_concentration': 0.0,
         'power_cost': 0.0,
-        'tolerance': 0.0,
-        # 'v_balance_cost': 0.0,
-        # 'v_average_load_index': 0.0,
-        # 'h_balance_cost': 0.0,
-        # 'h_average_load_index': 0.0,
-        # 'used_vms': 0,
-        'used_hms': 0
-        # 'used_time': 0.0
+        'v_balance_cost': 0.0,
+        'v_average_load_index': 0.0,
+        'h_balance_cost': 0.0,
+        'h_average_load_index': 0.0,
+        'used_vms': 0,
+        'used_hms': 0,
+        'used_time': 0.0
         }
 
     map_h_v = map_h2v(bins)
@@ -604,22 +605,22 @@ def compute_costs(bins, size=1):
 
     # Then, 对bins中前size个方案计算代价值（在新增算法中，size只有0一种值）
     for i in xrange(size):
-        # h_load_index = []      # 各HM的负载均衡指数
-        # v_load_index = []      # 各VM的负载均衡指数
+        h_load_index = []      # 各HM的负载均衡指数
+        v_load_index = []      # 各VM的负载均衡指数
         utilization = 0
 
         # 计算总能耗及各running VM/HM负载均衡指数
         tmp0, tmp1 = len(used_vms), len(used_hms)
-        # cost['used_vms'] = tmp0
+        cost['used_vms'] = tmp0
         cost['used_hms'] = tmp1
-        while tmp1 > 0:
-            # if tmp0 > 0:
-            #     v = used_vms[tmp0 - 1]
-            #     # 用VM配置尺寸与容器实际占用进行计算
-            #     index = 1.0 / (bins['v_rp'][v] - bins['v_p_cost'][i][v] + 0.0005) / (bins['v_rm'][v] - bins['v_m_cost'][i][v] + 0.0005)
-            #     v_load_index.append(index)
-            #     tmp0 -= 1
-            # if tmp1 > 0:
+        while tmp0 > 0 or tmp1 > 0:
+            if tmp0 > 0:
+                v = used_vms[tmp0 - 1]
+                # 用VM配置尺寸与容器实际占用进行计算
+                index = 1.0 / (bins['v_rp'][v] - bins['v_p_cost'][i][v] + 0.0005) / (bins['v_rm'][v] - bins['v_m_cost'][i][v] + 0.0005)
+                v_load_index.append(index)
+                tmp0 -= 1
+            if tmp1 > 0:
                 h = used_hms[tmp1 - 1]   
                 # 以docker作为实际负载进行代价计算
                 true_load_cpu = sum([bins['v_p_cost'][i][v] for v in map_h_v[h]])
@@ -627,28 +628,28 @@ def compute_costs(bins, size=1):
                 # 计算集群剩余资源量即各HM节点cpu、mem余量之乘积，所有active HM求和
                 utilization += (1.0 - true_load_cpu) * (1.0 - true_load_mem)
                 cost['power_cost'] += 446.7 + 5.28*true_load_cpu - 0.04747*true_load_cpu**2 + 0.000334*true_load_cpu**3
-                # index = 1.0 / (1.0005 - true_load_cpu) / (1.0005 - true_load_mem)
-                # h_load_index.append(index)
+                index = 1.0 / (1.0005 - true_load_cpu) / (1.0005 - true_load_mem)
+                h_load_index.append(index)
                 tmp1 -= 1
 
         
         # 计算所有running VMs/HMs间的负载方差
-        # tmp0, tmp1 = len(used_vms), len(used_hms)
-        # v_average_load_index = sum(v_load_index) / tmp0
-        # h_average_load_index = sum(h_load_index) / tmp1
-        # cost['v_average_load_index'] = v_average_load_index
-        # cost['h_average_load_index'] = h_average_load_index
-        # while tmp0 > 0 or tmp1 > 0:
-        #     if tmp0 > 0:
-        #         cost['v_balance_cost'] += (v_load_index[tmp0 - 1] - v_average_load_index)**2
-        #         tmp0 -= 1
-        #     if tmp1 > 0:
-        #         cost['h_balance_cost'] += (h_load_index[tmp1 - 1] - h_average_load_index)**2
-        #         tmp1 -= 1
+        tmp0, tmp1 = len(used_vms), len(used_hms)
+        v_average_load_index = sum(v_load_index) / tmp0
+        h_average_load_index = sum(h_load_index) / tmp1
+        cost['v_average_load_index'] = v_average_load_index
+        cost['h_average_load_index'] = h_average_load_index
+        while tmp0 > 0 or tmp1 > 0:
+            if tmp0 > 0:
+                cost['v_balance_cost'] += (v_load_index[tmp0 - 1] - v_average_load_index)**2
+                tmp0 -= 1
+            if tmp1 > 0:
+                cost['h_balance_cost'] += (h_load_index[tmp1 - 1] - h_average_load_index)**2
+                tmp1 -= 1
 
         # 计算负载平均差（方差算数平方跟）
-        # cost['v_balance_cost'] = math.sqrt(cost['v_balance_cost'] / len(used_vms))
-        # cost['h_balance_cost'] = math.sqrt(cost['h_balance_cost'] / len(used_hms))
+        cost['v_balance_cost'] = math.sqrt(cost['v_balance_cost'] / len(used_vms))
+        cost['h_balance_cost'] = math.sqrt(cost['h_balance_cost'] / len(used_hms))
         cost['degree_of_concentration'] = 100 * cost['used_hms'] - 13 * utilization
 
         # 计算VM迁移时间（仅聚合阶段）
@@ -656,7 +657,7 @@ def compute_costs(bins, size=1):
 
     # # print 'true cost={}'.format(cost)
     # return cost
-    return cost
+    return cost['used_hms'], cost['degree_of_concentration']
 
 def faked_cost(bins, size=1):
     '''
@@ -731,32 +732,7 @@ def faked_cost(bins, size=1):
     # # print 'origin cost={}'.format(cost)
     return cost
 
-def docker2service(scale):
-    '''
-    return map_d_s, map_s_d
-    (此算法为一次性独立的，即每main_init一次就使用一次本算法)
-    对在init.main_init()中生成的随机集群中scale数量的容器，随机产生所对应的serive映射，用于独立性检测
-    '''
-    map_d_s = {}
-    suffix = -1  # 记录上次安排完所属服务的容器
-    count = 0   # 记录服务下标
-    flag = scale
-    while flag > 0:
-        # 模拟生成需要随机数量replicas支持的服务
-        x = random.randint(0, 5)
-        for i in xrange(x):
-            if len(map_d_s) < scale :
-                map_d_s[i+suffix+1] = count
-        flag -= x
-        count += 1
-        if x != 0:
-            suffix = len(map_d_s) - 1
-    map_s_d = collections.defaultdict(list)
-    for key, value in map_d_s.items():
-        map_s_d[value].append(key)
-    return map_d_s, map_s_d
-
-def createJSON(data, addtion_scale, cost0, cost1, cost2, cost3, cost4, cost5):
+def createJSON(data, addtion_scale, cost0, cost1, cost2=0, cost3=0):
     '''
     goal: 构造符合Echarts平行坐标图的json数据,并覆盖写入file_name文件
     params: cost0 - 4 分别为FFDsum_simple、FFDSum_complex、safe_FFDSum_simple、safe_FFDSum_complex的代价结果
@@ -765,243 +741,23 @@ def createJSON(data, addtion_scale, cost0, cost1, cost2, cost3, cost4, cost5):
     # 构造填入各个算法列表的序列，该顺序必须严格按照平行坐标顺序：
     # FFDsum_simple、FFDSum_complex、safe_FFDSum_simple、safe_FFDSum_complex
     data['scale'].append(addtion_scale)
-    data['complex_concentration'].append(cost0)
-    data['complex_tolerance'].append(cost1)
-    data['safe_complex_concentration'].append(cost2)
-    data['safe_complex_tolerance'].append(cost3)
-    data['simple_concentration'].append(cost4)
-    data['simple_tolerance'].append(cost5)
+    data['simple'].append(cost0)
+    data['complex'].append(cost1)
+    data['safe_simple'].append(cost2)
+    data['safe_complex'].append(cost3)
     return data
 
-def detect_hm_independce(bins, map_d_s, map_s_d):
-    '''
-    对传入的集群状态bins进行以HM为独立性基础的检测与修复
-    @para: map_d_s 记录集群中所有docker-service映射；map_s_d 记录集群正在运行的service-docker映射。
-    @func: 在bins中通过map_s_d检测各服务所有replicas实际所在HMs，对于all replicas same HM情况，
-            则至少变换一个replica使其与集群中最大下标HM上某容器交换位置，直至检查完所有的service并返回修复独立性之后的bins
-    '''
-    # 遍历所有容器service
-    for service, dockers in map_s_d.items():
-        # 各服务所需容器配置及replicas数量
-        object_CPU, object_MEM, nums = bins['c_rp'][dockers[0]], bins['c_rm'][dockers[0]], len(dockers)
-        # 若该服务replica为1，即单节点独立;
-        if nums == 1:
-            continue
-        # 该服务所有replicas对应HM下标,及这些HMs多样性
-        d_hms = [bins['population'][0][j][-1] for j in dockers]
-        num_hms = len(set(d_hms))
-        # 若满足独立性，则进行下一个服务检测（实际在说明的时候是要对所欲replicas都进行独立放置）
-        if num_hms != 1:
-            continue
-
-        # 对服务的所有容器都进行调整，使得都分布在不同HM上
-        while nums > 1:
-            # 不满足独立性需要进行修复
-            flag = False
-            # 对该服务的第一个支撑replica从active HMs最大下标者开始依次往前，寻找可与该容器对调换位置的容器
-            origin_docker_suffix = dockers[nums - 1]
-            used_hms = list(set(bins['map_v_h'].values()))
-            used_hms.remove(d_hms[0])
-            origin_vm_suffix = bins['population'][0][origin_docker_suffix][0]
-            for hm in sorted(used_hms, reverse=True):
-                dockers_onHM, vms = find_docker_onHM(bins, hm, 0)
-                # 依次寻找其他HM上可与该服务第一个replica对掉而满足双方资源约束的解
-                for i in xrange(len(dockers_onHM)):
-                    vm_suffix = vms[i]
-                    docker_suffix = dockers_onHM[i]
-                    # 换出原docker换入replica之后的资源
-                    reversed_cpu1 = bins['v_rp'][vm_suffix] - (bins['v_p_cost'][0][vm_suffix] - bins['c_rp'][docker_suffix] + object_CPU)
-                    reversed_mem1 = bins['v_rm'][vm_suffix] - (bins['v_m_cost'][0][vm_suffix] - bins['c_rm'][docker_suffix] + object_MEM)
-                    # 换入新容器换出replica后的资源
-                    reversed_cpu0 = bins['v_rp'][origin_vm_suffix] - (bins['v_p_cost'][0][origin_vm_suffix] + bins['c_rp'][docker_suffix] - object_CPU)
-                    reversed_mem0 = bins['v_rm'][origin_vm_suffix] - (bins['v_m_cost'][0][origin_vm_suffix] + bins['c_rm'][docker_suffix] - object_MEM)
-                    # 若对换后满足资源约束，则更新集群
-                    if reversed_cpu0 >= 0 and reversed_cpu1 >= 0 and reversed_mem0 >= 0 and reversed_mem1 >=0:
-                        bins['v_p_cost'][0][vm_suffix] += (object_CPU - bins['c_rp'][docker_suffix])
-                        bins['v_m_cost'][0][vm_suffix] += (object_MEM - bins['c_rm'][docker_suffix])
-                        bins['v_p_cost'][0][origin_vm_suffix] += (bins['c_rp'][docker_suffix] - object_CPU)
-                        bins['v_m_cost'][0][origin_vm_suffix] += (bins['c_rm'][docker_suffix] - object_MEM)
-                        bins['population'][0][origin_docker_suffix] = [vm_suffix, hm]
-                        bins['population'][0][docker_suffix] = [origin_vm_suffix, d_hms[nums - 1]]
-                        # map_v_h由于是对掉并不会产生新的拓扑变化，故不用更新
-                        flag = True
-                        nums -= 1
-                        break
-                    # 或者是否有active VM能够容纳该容器
-                    reversed_cpu2 = bins['v_rp'][vm_suffix] - (bins['v_p_cost'][0][vm_suffix] + object_CPU)
-                    reversed_mem2 = bins['v_rm'][vm_suffix] - (bins['v_m_cost'][0][vm_suffix] + object_MEM)
-                    if reversed_cpu2 >= 0 and reversed_cpu2 >= 0:
-                        bins['v_p_cost'][0][vm_suffix] += object_CPU
-                        bins['v_m_cost'][0][vm_suffix] += object_MEM
-                        bins['v_p_cost'][0][origin_vm_suffix] -= object_CPU
-                        bins['v_m_cost'][0][origin_vm_suffix] -= object_MEM
-                        bins['population'][0][origin_docker_suffix] = [vm_suffix, hm]
-                        flag = True
-                        nums -= 1
-                        break
-                # 若在该hm上对换而修复，则推出本次service修复，进入下一个
-                if flag:
-                    # 否则继续寻找下一个hm
-                    break
-            
-            # 若所有active HMs均无发用于修复独立性,则新建HM与VM
-            if not flag:
-                second_flag = Contrast.find_HM_complex(bins, object_CPU, object_MEM, vm_option)
-                
-                # 代表active HMs中有HM可以容纳能够放入该容器的最小VM
-                if second_flag:
-                    hm_suffix, min_vm = flag
-                    vm_suffix = len(bins['v_p_cost'][0])
-
-                    # 更新放入容器后造成的VM、HM资源变化
-                    bins['v_p_cost'][0].append(object_CPU)
-                    bins['v_m_cost'][0].append(object_MEM)
-                    bins['h_p_cost'][0][hm_suffix] += min_vm[0]
-                    bins['h_m_cost'][0][hm_suffix] += min_vm[1]
-
-                    # 追加系统容器、vm数量及资源分布
-                    bins['c_rp'].append(object_CPU)
-                    bins['c_rm'].append(object_MEM)
-                    bins['v_rp'].append(min_vm[0])
-                    bins['v_rm'].append(min_vm[1])
-
-                    # 更新‘population’、‘map_v_h’
-                    bins['population'][0].append([vm_suffix, hm_suffix])
-                    bins['map_v_h'][vm_suffix] = hm_suffix
-                    flag = True
-                    nums -= 1
-                    break
-
-                # 若所有active HMs均不满足，则新建HM并新建VM，（所建VM规格先不加以控制）
-                if not second_flag:
-                    # 创建最大VM
-                    vm = Contrast.create_VM_random(object_CPU, object_MEM,vm_option)
-                    vm_suffix = len(bins['v_p_cost'][0])
-                    hm_suffix = len(bins['h_m_cost'][0])
-
-                    # 更新放入容器后造成的VM、HM资源变化
-                    bins['v_p_cost'][0].append(object_CPU)
-                    bins['v_m_cost'][0].append(object_MEM)
-                    bins['h_p_cost'][0].append(vm['rp'])
-                    bins['h_m_cost'][0].append(vm['rm'])
-
-                    # 追加系统容器、vm数量及资源分布
-                    bins['v_rp'].append(vm['rp'])
-                    bins['v_rm'].append(vm['rm'])
-
-                    # 更新‘population’、‘map_v_h’
-                    bins['population'][0][origin_docker_suffix] = [vm_suffix, hm_suffix]
-                    bins['map_v_h'][vm_suffix] = hm_suffix
-                    flag = True
-                    nums -= 1
-                    break
-    return bins
-
-def find_docker_onHM(bins, vhm, label):
-    '''
-    2017-12-21 更新:  通过label表明传入的时hm下标还是vm下标
-    即控制label=0,说明查找某hm上所有docker与vm 2个list
-      控制label=1, 说明查找某vm上的所有docker
-    给定集群以及active HM下标，返回该HM上承载的所有容器下标及vm下标
-    '''
-    dockers_onHM, vms_onHM, dockers_onVM = [], [], []
-    for i in xrange(len(bins['c_rp'])):
-        v, h = bins['population'][0][i]
-        if label == 0:
-            if  h == vhm:
-                dockers_onHM.append(i)
-                vms_onHM.append(v)
-        elif label == 1:
-            if v == vhm:
-                dockers_onVM.append(i)
-    if label == 0:
-        return (dockers_onHM, vms_onHM)
-    elif label == 1:
-        return dockers_onVM
-
-def simulate_crash_HM(bins, num_crash, map_d_s, map_s_d, flag):
-    '''
-    2017-12-24 为了聚合阶段新写的。
-        对于集群中all active HMs，指定随机挑选num_crash个HM为被摧毁对象。
-        查找这些hm运行服务的支持副本数量代入tolerance= a*N_severity+b*N_medium+c*N_mild,
-        a，b, c分别取10,3,1进行计算
-    '''
-    N_severity, N_medium, N_mild = 0, 0, 0
-    crash_services = {}
-    active_hms = list(set(bins['map_v_h'].values()))
-    # 随机挑选被摧毁HMs列表
-    hms_crash = random.sample(active_hms, num_crash)
-    print "HM {} 将被摧毁".format(hms_crash)
-    # 遍历宕机的HM，记录所有宕机造成的嫌疑服务与
-    for h in hms_crash:
-        print '第 {} hm将被摧毁'.format(h)
-        dockers, vms = find_docker_onHM(bins, h, 0)
-        print "hm {} 上有容器 {}".format(h, dockers)
-        # 遍历dockers
-        for d in dockers:
-            # 依据该容器查其对应的服务
-            service = map_d_s[d]
-            print "容器 {} 所属的服务 {} ".format(d, service)
-            # 确保所有的服务仅被检查一遍，避免同一服务多个容器多次被纳入tolerance计算
-            if service not in crash_services:
-                # 确认该服务所有对应的replicas及其所在HM下标
-                replicas = map_s_d[service]
-                replicas_hms = [bins['population'][0][i][-1] for i in replicas]
-                # 对于仅有一个支撑容器的服务默认为其用户未指定高可用
-                if len(set(replicas_hms)) == 0:
-                    continue
-                print "服务 {} 的实际运行HM为 {}".format(service, replicas_hms)
-                dangerous_num = 0
-                # 统计该服务所有replicas实际HMs有多少被hm_crash选中(至少为1,即该h号HM)
-                for x in hms_crash:
-                    if x in replicas_hms:
-                        if flag == 0:
-                            dangerous_num += 1
-                        elif flag == 1:
-                            dangerous_num += replicas_hms.count(x)
-                        else:
-                            dangerous_num += (replicas_hms.count(x)+random.randint(0,2))
-                print "服务 {} 有 {} 个容器处于危险中".format(service, dangerous_num)
-                safe_num = len(replicas_hms) - dangerous_num
-                if safe_num < 0:
-                    safe_num == 0
-                if safe_num < 1:
-                    N_severity += 1
-                elif safe_num < 2 and safe_num >= 1:
-                    N_medium += 1
-                elif safe_num >= 2:
-                    N_mild += 1
-                crash_services[service] = [dangerous_num, safe_num]
-    # 计算方案容错能力
-    tolerance = 10000 * N_severity + 2 * N_medium + 0.1 * N_mild
-    print crash_services
-    return tolerance
-
-def safe_FFDSum_complex(bins, addtion0):
-    bins = FFDSum_complex(bins, addtion0)
-    # 为求容错做准备
-    scale = len(bins['c_rp'])
-    map_d_s, map_s_d = docker2service(scale)
-    # 对结果进行容错调整
-    bins = detect_hm_independce(bins, map_d_s, map_s_d)
-    return bins
-
-def main_controller(function_str, bins, addtion0, func_handler, return_dict, flag):
+def main_controller(function_str, bins, addtion0, func_handler, return_dict):
     '''
     2017-12-20 23:00 使用多进程共享变量与多进程实现4种方式并行计算
     function_str用于标识哪个方法,0=FFDSum_simple 1=FFDSum_complex 2=FFDSum_simple 3=FFDSum_complex
     使用函数句柄实现不同方法的串行计算逻辑
-    flag == 0 即为安全性容错
     '''
     # 初始放置方案的计算
-    after_bins = func_handler(bins, addtion0)
-    scale = len(bins['c_rp'])
-    map_d_s, map_s_d = docker2service(scale)
+    after_bins, used_time = func_handler(bins, addtion0)
     # 该方案的目标优化结果
-    cost = compute_costs(after_bins)
-    # 模拟宕机计算容错
-    cost['tolerance'] = simulate_crash_HM(after_bins, 20, map_d_s, map_s_d, flag)
-    return_dict[function_str] = [cost['degree_of_concentration'], cost['tolerance']]
+    used_hm, utilization = compute_costs(after_bins)
+    return_dict[function_str] = [used_hm, utilization]
     return return_dict
 
 
@@ -1017,30 +773,25 @@ if __name__ == '__main__':
     jobs = []
 
     # 并行进程数目（其中Gen/2即为重复次数）
-    Gen = 6
+    Gen = 4
        
     # 1. 用于生成json的数据
     data = {
         'scale':[],
-        'complex_concentration':[],
-        'complex_tolerance':[],
-        'simple_concentration':[],
-        'simple_tolerance':[],
-        'safe_complex_tolerance':[],
-        'safe_complex_concentration':[]
+        'simple':[],
+        'complex':[],
+        'safe_simple':[],
+        'safe_complex':[]
     }
 
     # 2. 产生新初始集群与新增容器的服务数量
-    init_popu0 = main_init(50, 1.0)          # 用于safe_complex算法
-    init_popu1 = copy.deepcopy(init_popu0)   # 用于simple算法
-    init_popu2 = copy.deepcopy(init_popu1)   # 用于safe_complex算法
-    init_popu3 = copy.deepcopy(init_popu2)   # 用于simple算法
-    init_popu4 = copy.deepcopy(init_popu1)   # 用于complex算法
-    init_popu5 = copy.deepcopy(init_popu2)   # 用于complex算法
-
+    init_popu0 = main_init(50, 1.0)      # 用于simple算法
+    init_popu1 = copy.deepcopy(init_popu0)   # 用于complex算法
+    init_popu2 = copy.deepcopy(init_popu1)   # 用于simple算法
+    init_popu3 = copy.deepcopy(init_popu2)   # 用于complex算法
 
     cycle = []
-    for i in xrange(2, 4):
+    for i in xrange(1, 2):
         a = 10 ** i
         ll = sorted(random.sample(range(1,10), 4))
         for j in ll:
@@ -1048,12 +799,10 @@ if __name__ == '__main__':
 
     # 3. 模拟多批量新增场景
     for scale in cycle:
-        avg_complex_concentration = 0
-        avg_complex_tolerance = 0
-        avg_safe_complex_concentration = 0
-        avg_safe_complex_tolerance = 0
-        avg_simple_concentration = 0
-        avg_simple_tolerance = 0
+        avg_simple = [0, 0]
+        avg_complex = [0, 0]
+        avg_safe_simple = [0, 0]
+        avg_safe_complex = [0, 0]
 
         # 为了体现随机性，分别为各进程生成每批的新增服务及其副本
         addtion0 = create_addtion(1.0, scale)
@@ -1065,33 +814,23 @@ if __name__ == '__main__':
         # 用Gen个进程并行运行，取均值
         for gen in xrange(Gen):
             if gen == 0:
-                # safe_complex算法
-                p = multiprocessing.Process(target=main_controller, args=(0, init_popu0, addtion0, safe_FFDSum_complex, return_dict, 0))
+                # simple算法
+                p = multiprocessing.Process(target=main_controller, args=(0, init_popu0, addtion0, FFDSum_simple, return_dict))
                 jobs.append(p)
                 p.start()
             elif gen == 1:
-                # simple 算法
-                p = multiprocessing.Process(target=main_controller, args=(1, init_popu1, addtion0, FFDSum_simple, return_dict, -1))
+                # complex 算法
+                p = multiprocessing.Process(target=main_controller, args=(1, init_popu1, addtion0, FFDSum_complex, return_dict))
                 jobs.append(p)
                 p.start()
             elif gen == 2:
-                # safe_complex算法
-                p = multiprocessing.Process(target=main_controller, args=(2, init_popu2, addtion1, safe_FFDSum_complex, return_dict, 0))
+                # simple算法
+                p = multiprocessing.Process(target=main_controller, args=(2, init_popu2, addtion1, FFDSum_simple, return_dict))
                 jobs.append(p)
                 p.start()
             elif gen == 3:
-                # simple算法
-                p = multiprocessing.Process(target=main_controller, args=(3, init_popu3, addtion1, FFDSum_simple, return_dict, -1))
-                jobs.append(p)
-                p.start()
-            elif gen == 4:
                 # complex算法
-                p = multiprocessing.Process(target=main_controller, args=(4, init_popu4, addtion0, FFDSum_complex, return_dict, 1))
-                jobs.append(p)
-                p.start()
-            elif gen == 5:
-                # complex算法
-                p = multiprocessing.Process(target=main_controller, args=(5, init_popu5, addtion1, FFDSum_complex, return_dict, 1))
+                p = multiprocessing.Process(target=main_controller, args=(3, init_popu3, addtion1, FFDSum_complex, return_dict))
                 jobs.append(p)
                 p.start()
         
@@ -1100,116 +839,20 @@ if __name__ == '__main__':
             proc.join()
         
         # 计算迭代gen代的平均值,并写入文件
-        avg_safe_complex_concentration += (return_dict[0][0] + return_dict[2][0])
-        avg_safe_complex_tolerance += (return_dict[0][1] + return_dict[2][1])
-        avg_complex_concentration += (return_dict[4][0] + return_dict[5][0])
-        avg_complex_tolerance += (return_dict[4][1] +return_dict[5][1])
-        avg_simple_concentration += (return_dict[1][0] + return_dict[3][0])
-        avg_simple_tolerance += (return_dict[1][1] +return_dict[3][1])
-
-        
-        avg_scale /= Gen/3
-        avg_complex_concentration /= Gen/3
-        avg_complex_tolerance /= Gen/3
-        avg_safe_complex_concentration /= Gen/3
-        avg_safe_complex_tolerance /= Gen/3
-        avg_simple_concentration /= Gen/3
-        avg_simple_tolerance /= Gen/3
-        
-        data = createJSON(data, avg_scale, avg_complex_concentration, avg_complex_tolerance, avg_safe_complex_concentration, avg_safe_complex_tolerance, avg_simple_concentration, avg_simple_tolerance)
+        avg_simple[0] += (return_dict[0][0] + return_dict[2][0])
+        avg_simple[1] += (return_dict[0][1] + return_dict[2][1])
+        avg_complex[0] += (return_dict[1][0] + return_dict[3][0])
+        avg_complex[1] += (return_dict[1][1] +return_dict[3][1])
+        avg_safe_simple = 0
+        avg_safe_complex = 0
+        avg_scale /= Gen/2
+        avg_simple[0] /= Gen/2
+        avg_complex[0] /= Gen/2
+        avg_simple[1] /= Gen/2
+        avg_complex[1] /= Gen/2
+        data = createJSON(data, avg_scale, avg_simple, avg_complex, avg_safe_simple, avg_safe_complex)
         ## 4. 记录data用于前端数据可视化
-        with open('.//viz//contrast-addtion-4-multiprocess-safe.json','a') as f:
+        with open('.//viz//unsafe-contrast-multiprocess4.json'.format(datetime.datetime.now()),'a') as f:
             f.flush()
             json.dump(data, f, indent=2)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    # # 多进程初始化
-    # # p = multiprocessing.Pool()
-    # manager = multiprocessing.Manager()
-    # jobs = []
-
-    # # 重复次数
-    # Gen = 3
-       
-    # # 1. 用于生成json的数据
-    # data = {
-    #     'scale':[],
-    #     'simple':[],
-    #     'complex':[],
-    #     'safe_simple':[],
-    #     'safe_complex':[]
-    # }
-
-    # # 2. 产生新初始集群与新增容器的服务数量
-    # init_popu0 = main_init(50, 1.0)
-    # init_popu1 = copy.deepcopy(init_popu0)
-    # init_popu2 = copy.deepcopy(init_popu1)
-    # init_popu3 = copy.deepcopy(init_popu2)
-
-    # cycle = []
-    # for i in xrange(1, 3):
-    #     a = 10 ** i
-    #     ll = sorted(random.sample(range(1,10), 4))
-    #     for j in ll:
-    #         cycle.append(j*a)
-
-    # # 3. 模拟多批量新增场景
-    # for scale in cycle:
-    #     avg_scale = 0
-    #     avg_simple = [0, 0]
-    #     avg_complex = [0, 0]
-    #     avg_safe_simple = [0, 0]
-    #     avg_safe_complex = [0, 0]
-
-    #     # 运行10次，取效果最好者
-    #     for gen in xrange(Gen):
-    #         # 记录初始集群信息并深度拷贝多副本用于算法间对比
-    #         addtion0 = create_addtion(1.0, scale)
-    #         avg_scale += len(init_popu0['c_rp']) + sum(addtion0['replicas'])
-    #         cost0 = compute_costs(init_popu0)
-
-    #         # 对初始集群的多副本进行不同放置决策并计算优化模型结果
-    #         #[x.get() for x in [pool.apply_async(pool_test, (x,)) for x in gen_list(l)]]
-    #         return_dict = manager.dict()
-    #         p = multiprocessing.Process(target=main_controller, args=(0, init_popu0, addtion0, FFDSum_simple, return_dict))
-    #         jobs.append(p)
-    #         p.start()
-    #         p = multiprocessing.Process(target=main_controller, args=(1, init_popu1, addtion0, FFDSum_complex, return_dict))
-    #         jobs.append(p)
-    #         p.start()
-
-    #         # print p.map(main_controller, (init_popu0, init_popu1), (addtion0, addtion0), (FFDSum_simple, FFDSum_complex))
-
-    #         for proc in jobs:
-    #             proc.join()
-    #         # print return_dict.values()
-    #         avg_simple[0] += return_dict[0][0]
-    #         avg_simple[1] += return_dict[0][1]
-    #         avg_complex[0] += return_dict[1][0]
-    #         avg_complex[1] += return_dict[1][1]
-    #         avg_safe_simple = 0
-    #         avg_safe_complex = 0
-    #     # 计算迭代gen代的平均值,并写入文件
-    #     avg_scale /= Gen
-    #     avg_simple[0] /= Gen
-    #     avg_complex[0] /= Gen
-    #     avg_simple[1] /= Gen
-    #     avg_complex[1] /= Gen
-    #     data = createJSON(data, avg_scale, avg_simple, avg_complex, avg_safe_simple, avg_safe_complex)
-    # # # 4. 记录data用于前端数据可视化
-    # with open('.//viz//contrast-addtion-{}-demo.json'.format(datetime.datetime.now()),'w') as f:
-    #     f.flush()
-    #     json.dump(data, f, indent=2)

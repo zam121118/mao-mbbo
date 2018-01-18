@@ -1,15 +1,14 @@
 #!/usr/bin/env python
 #-*- coding:utf-8 -*-
 '''
-Date : 2017-11-22
+Date : 2018-1-17
 @Author : Amy
 Goal : useful modules
-Digest : 本模块定义了能够描述FFDSum以及Dot-Prod算法的有效模块，可以灵活的在第三方文件中引用
-更新： 2017-12-12
-      注意： 所有的代价计算仅以集群中active HMs为准，即v_p/m_cost、h_p/m_cost均不为0.0或直接使用map_v_h计算
-      修改代价计算模块，能耗计算以实际docker为负载计算；
-      负载均衡在VM层仅计算纵向，无法衡量横向
-      HM层负载均衡需要纵向与横向
+Digest : 本模块包含4种启发式算法对容器新增场景的服务非容错初始放置的求解方法，
+         分别包好FFDSum、FFDProd、Dot-Product(cosine)、L2(distance of vector)算法
+Notes：1. 所有的代价计算仅以集群中active HMs为准，即v_p/m_cost、h_p/m_cost均不为0.0或直接使用map_v_h计算
+       2. 代价计算模块中HM/VM的负载均已其上实际承载的所有容器产生的资源耗费作为计算准则；
+       3. 对于负载均衡放置场景，仅考虑VM内部、HM的内、外部负载均衡模型；
 '''
 
 import time
@@ -21,14 +20,12 @@ from init import *
 
 def Dot_product(bins, objects):
     '''
-    @param: bins 代表当前系统状态
-            objects 代表待放入bin的容器
-    @return: 安排好所有objects的集群bins状态
+    @param: bins 代表当前数据中心集群系统状态
+            objects 代表待放入bin的容器新增序列
+    @return: 采用余弦夹角保证负载均衡的初始放置运行后bins状态
     '''
 
     print " \n进入 Dot_product() 方法" 
-
-
     time0 = time.time()
 
     # d-v-h架构下新增阶段希望做到一定节能，即尽可能使用当前已有的VM，尽量不去开启新的HM
@@ -103,14 +100,12 @@ def Dot_product(bins, objects):
 
 def FFDSum(bins, objects):
     '''
-    @param: bins 代表当前系统状态
-            objects 代表待放入bin的容器
-    @return: 安排好所有objects的集群bins状态
+    @param: bins 代表当前数据中心集群系统状态
+            objects 代表待放入bin的容器新增序列
+    @return: 采用负载集中于VM/HM的初始放置运行后bins状态
     '''
 
     print " \n进入 FFDSum() 方法" 
-
-
     time0 = time.time()
 
     # d-v-h架构下新增阶段希望做到一定节能，即尽可能使用当前已有的VM，尽量不去开启新的HM
@@ -185,14 +180,12 @@ def FFDSum(bins, objects):
 
 def FFDProd(bins, objects):
     '''
-    @param: bins 代表当前系统状态
-            objects 代表待放入bin的容器
-    @return: 安排好所有objects的集群bins状态
+    @param: bins 代表当前数据中心集群系统状态
+            objects 代表待放入bin的容器新增序列
+    @return: 采用多维资源连乘转为一位标量后FFD的的初始放置运行后bins状态
     '''
 
     print " \n进入 FFDProd() 方法" 
-
-
     time0 = time.time()
 
     # d-v-h架构下新增阶段希望做到一定节能，即尽可能使用当前已有的VM，尽量不去开启新的HM
@@ -266,14 +259,12 @@ def FFDProd(bins, objects):
 
 def func_L2(bins, objects):
     '''
-    @param: bins 代表当前系统状态
-            objects 代表待放入bin的容器
-    @return: 安排好所有objects的集群bins状态
+    @param: bins 代表当前数据中心集群系统状态
+            objects 代表待放入bin的容器新增序列
+    @return: 采用资源使用向量与HM总资源向量间欧式距离的初始放置运行后bins状态
     '''
 
     print " \n进入 func_L2 方法" 
-
-
     time0 = time.time()
 
     # d-v-h架构下新增阶段希望做到一定节能，即尽可能使用当前已有的VM，尽量不去开启新的HM
@@ -370,7 +361,6 @@ def find_HM(bins, v_rp, v_rm, vm_suffix, handle):
     return hm_suffix
 
 def deprecated_create_VM(c_rp, c_rm, rp_option, rm_option):
-
     '''
     依据实验可选的VMcpu、mem list尺寸(rp_option、rm_option)随机生成可以容纳(c_rp、c_rm)的VM
     '''
@@ -385,13 +375,10 @@ def deprecated_create_VM(c_rp, c_rm, rp_option, rm_option):
     return vm
 
 def create_VM(c_rp, c_rm, vm_option):
-
     '''
     为了防止完全随机的产生虚拟机尺寸，而希望可以人为的预先设置几种虚拟机尺寸(cpu, mem)
-    [0.3, 0.3], [0.5, 0.4] [0.6, 0.5] [0.8, 0.7] [1.0, 0.8] [1.0, 1.0]
     '''
     print "\n 进入 create_VM() 方法"
-
     vm = {'rp':0, 'rm':0}
     for i in xrange(len(vm_option)):
         if vm_option[i][0] >= c_rp and vm_option[i][1] >= c_rm:
@@ -421,7 +408,6 @@ def weightVMBins_FFDSum(bins, object_CPU, object_MEM):
     计算集群bins(VMs)中所有bin的权重，并返回weightedVMBins记录有各个node(VM)得分的weightedVMBins
     '''
     print "\n 进入weightVMBins_FFDSum() 方法"
-
     weightedVMBins = {}
     for j in xrange(len(bins['v_p_cost'][0])):
         bin_reservedCPU = bins['v_rp'][j] - bins['v_p_cost'][0][j]
@@ -443,7 +429,6 @@ def weightHMBins_FFDSum(bins, object_CPU, object_MEM):
     计算集群bins(HMs)中所有bin的权重，并返回weightedHMBins记录有各个node(HM)得分的weightedHMBins
     '''
     print "\n 进入weightHMBins_FFDSum() 方法"
-
     weightedHMBins = {}
     for j in xrange(len(bins['h_p_cost'][0])):
         bin_reservedCPU = 1.0 - bins['h_p_cost'][0][j]
@@ -467,7 +452,6 @@ def weightVMBins_DotProd(bins, object_CPU, object_MEM):
     并返回weightedVMBins记录有各个node(VM) cos值得分的weightedVMBins
     '''
     print "\n 进入weightVMBins_DotProd() 方法"
-
     weightedVMBins = {}
     for j in xrange(len(bins['v_p_cost'][0])):
         bin_reservedCPU = bins['v_rp'][j] - bins['v_p_cost'][0][j]
@@ -507,7 +491,6 @@ def weightHMBins_DotProd(bins, object_CPU, object_MEM):
     并返回weightedHMBins记录有各个node(HM) cos值得分的weightedHMBins
     '''
     print "\n 进入weightHMBins_DotProd() 方法"
-
     weightedHMBins = {}
     for j in xrange(len(bins['h_p_cost'][0])):
         bin_reservedCPU = 1.0 - bins['h_p_cost'][0][j]
@@ -544,7 +527,6 @@ def weightVMBins_FFDProd (bins, object_CPU, object_MEM):
     计算集群bins(VMs)中所有bin的权重，并返回weightedVMBins记录有各个node(VM)得分的weightedVMBins
     '''
     print "\n 进入weightVMBins_FFDProd() 方法"
-
     weightedVMBins = {}
     for j in xrange(len(bins['v_p_cost'][0])):
         bin_reservedCPU = bins['v_rp'][j] - bins['v_p_cost'][0][j]
@@ -561,8 +543,6 @@ def weightHMBins_FFDProd(bins, object_CPU, object_MEM):
     计算集群bins(HMs)中所有bin的权重，并返回weightedHMBins记录有各个node(HM)得分的weightedHMBins
     '''
     print "\n 进入weightHMBins_FFDProd() 方法"
-
-
     weightedHMBins = {}
     for j in xrange(len(bins['h_p_cost'][0])):
         bin_reservedCPU = 1.0 - bins['h_p_cost'][0][j]
@@ -579,7 +559,6 @@ def weightVMBins_L2(bins, object_CPU, object_MEM):
     计算集群bins(VMs)中所有bin的权重，并返回weightedVMBins记录有各个node(VM)得分的weightedVMBins
     '''
     print "\n 进入weightVMBins_L2() 方法"
-
     weightedVMBins = {}
     for j in xrange(len(bins['v_p_cost'][0])):
         bin_reservedCPU = bins['v_rp'][j] - bins['v_p_cost'][0][j]
@@ -599,8 +578,6 @@ def weightHMBins_L2(bins, object_CPU, object_MEM):
     计算集群bins(HMs)中所有bin的权重，并返回weightedHMBins记录有各个node(HM)得分的weightedHMBins
     '''
     print "\n 进入weightHMBins_L2() 方法"
-
-
     weightedHMBins = {}
     for j in xrange(len(bins['h_p_cost'][0])):
         bin_reservedCPU = 1.0 - bins['h_p_cost'][0][j]
@@ -686,16 +663,14 @@ def compute_costs(bins, size=1):
         cost['v_balance_cost'] = math.sqrt(cost['v_balance_cost'] / len(used_vms))
         cost['h_balance_cost'] = math.sqrt(cost['h_balance_cost'] / len(used_hms))
 
-
         # 计算VM迁移时间（仅聚合阶段）
         pass
-
     # print 'true cost={}'.format(cost)
     return cost
 
 def faked_cost(bins, size=1):
     '''
-    注意： 这里负载以VM配置作为负载考虑
+    注意： （该方法已废弃，because：）这里负载以VM配置作为负载考虑
     计算bins中前size个方案对应的能耗、负载均衡方差代价值
     以集群环境中所有running VMs/HMs作为计算对象
     '''
@@ -768,20 +743,14 @@ def faked_cost(bins, size=1):
 
 def compositive_func(bins, objects, s0, handle0, handle1):
     '''
+    @note:使用函数句柄的方式保证对比实验各个方法调用统一模式
     @param: bins 代表当前系统状态
             objects 代表待放入bin的容器
     @return: 安排好所有objects的集群bins状态
     '''
 
-    # print " \n进入 Dot_product() 方法"
     print " \n进入 {} 方法".format(s0)
-
-
     time0 = time.time()
-
-    # d-v-h架构下新增阶段希望做到一定节能，即尽可能使用当前已有的VM，尽量不去开启新的HM
-    # 情况1： 新增容器以VM作为直接node考虑，为当前所有可容纳running VM计算向量间夹角余弦值，值最高者放入
-    # 情况2： all running vms均无法放入，init_VM产生新VM，再对所有HM计算与VM向量间夹角余弦值，值最高者放入
 
     for x in xrange(len(objects['c_rp'])):
         object_CPU, object_MEM, i = objects['c_rp'][x], objects['c_rm'][x], objects['replicas'][x]
@@ -951,8 +920,8 @@ if __name__ == '__main__':
         data = createJSON(data, cost1, 'FFDProd', addtion_scale)
         data = createJSON(data, cost2, 'Dot_Prod', addtion_scale)
         data = createJSON(data, cost3, 'L2', addtion_scale)
-    # 导出为json文件
-    with open('.//viz//addtion-demo1.json', 'w') as f:
-        f.flush()
-        json.dump(data, f, indent=2)
+        # 导出为json文件
+        with open('.//viz//addtion-tools-result-of-test.json', 'a') as f:
+            f.flush()
+            json.dump(data, f, indent=2)
 

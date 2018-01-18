@@ -17,8 +17,6 @@ import sys
 
 
 
-
-
 # rp_option = [0.5]                      # vm可选的cpu尺寸
 # rm_option = [0.5]                      # vm可选的mem尺寸
 vm_option = [(0.3, 0.3), (0.5, 0.4), (0.6, 0.5), (0.8, 0.7), (1.0, 0.8), (1.0, 1.0)]
@@ -32,8 +30,6 @@ def FFDProd(bins, objects):
     '''
 
     print " \n进入 FFDProd() 方法" 
-
-
     time0 = time.time()
 
     # d-v-h架构下新增阶段希望做到一定节能，即尽可能使用当前已有的VM，尽量不去开启新的HM

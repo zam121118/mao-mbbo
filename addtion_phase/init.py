@@ -25,9 +25,6 @@ Change: 2017-12-2
     5. 因为考虑到docker微服务编排调度器必须具有的容错能力，再对所有容器及其replicas安排好place后，
     必须实行independence检测，同一服务的多个replicas不可位于同一Node(此处应为VM),所以采用BFD微调策略在该主机多VM间进行选择性
     换出与纳新。
-
-
-
 '''
 
 
@@ -303,8 +300,7 @@ def main_init(num_var, p):
 
 def create_addtion(p, addtion_nums):
     '''
-    2017-12-18 更新：
-        创建批量新增addtion0，所有容器规格由p指导
+    创建由p指导容器类型的addtion_nums个服务
     '''
     # 1.算法主要参数设置
     rp_u = 0.25                            # 容器请求CPU的指导变量
