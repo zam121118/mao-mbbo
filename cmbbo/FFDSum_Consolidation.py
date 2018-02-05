@@ -1020,125 +1020,125 @@ if __name__ == '__main__':
 
     # ----------------- 对比实验二  非容错 3层与2层 mbbo聚合 ------------------------------ 
     # 用于d-v-h3层聚合与v-h2层聚合对比，不考虑容错的  使用mbbo 方法聚合（已完成）
-    # gen = 30000
-    # num_crash = 20
-    # for p_relation in [0.75, 0.02, -0.75]:
-    #     data = {
-    #         'scale' : [],
-    #         'degree_of_concentration_0':[],
-    #         'power_cost_0': [],
-    #         'used_hms_0': [],
-    #         'degree_of_concentration_2':[],
-    #         'power_cost_2': [],
-    #         'used_hms_2': [],
-    #         'degree_of_concentration_3':[],
-    #         'power_cost_3': [],
-    #         'used_hms_3': []
-    #     }
-    #     cycle = [50, 100, 300, 700, 1000]
-    #     for scale in cycle:
-    #         # 初始准备
-    #         init_popu0 = init.main_init(scale, p_relation)
-    #         # init_popu1 = copy.deepcopy(init_popu0)
-    #         rp, rm, v_p_cost, v_m_cost = for_vm_mbbo(init_popu0)
-    #         c_rp, c_rm = init_popu0['c_rp'], init_popu0['c_rm']
-    #         rp1, rm1 = copy.deepcopy(rp), copy.deepcopy(rm)
+    gen = 30000
+    num_crash = 20
+    for p_relation in [0.75, 0.02, -0.75]:
+        data = {
+            'scale' : [],
+            'degree_of_concentration_0':[],
+            'power_cost_0': [],
+            'used_hms_0': [],
+            'degree_of_concentration_2':[],
+            'power_cost_2': [],
+            'used_hms_2': [],
+            'degree_of_concentration_3':[],
+            'power_cost_3': [],
+            'used_hms_3': []
+        }
+        cycle = [50, 100, 300, 700, 1000]
+        for scale in cycle:
+            # 初始准备
+            init_popu0 = init.main_init(scale, p_relation)
+            # init_popu1 = copy.deepcopy(init_popu0)
+            rp, rm, v_p_cost, v_m_cost = for_vm_mbbo(init_popu0)
+            c_rp, c_rm = init_popu0['c_rp'], init_popu0['c_rm']
+            rp1, rm1 = copy.deepcopy(rp), copy.deepcopy(rm)
 
-    #         # 聚合前的各项代价
-    #         cost0 = consolidation_costs_nosafe(init_popu0, 0)
-    #         data['scale'].append(scale)
-    #         data['degree_of_concentration_0'].append(cost0['degree_of_concentration'])
-    #         data['power_cost_0'].append(cost0['power_cost'])
-    #         data['used_hms_0'].append(cost0['used_hms'])
+            # 聚合前的各项代价
+            cost0 = consolidation_costs_nosafe(init_popu0, 0)
+            data['scale'].append(scale)
+            data['degree_of_concentration_0'].append(cost0['degree_of_concentration'])
+            data['power_cost_0'].append(cost0['power_cost'])
+            data['used_hms_0'].append(cost0['used_hms'])
 
-    #         # 2层mbbo聚合时需要的集群状态信息(不容错)
-    #         cost2, elite_chrom2 = vm_mbbo.main(gen, 10, scale, p_relation, ['power'], rp, rm, v_p_cost, v_m_cost)
-    #         data['degree_of_concentration_2'].append(cost2['degree_of_concentration'])
-    #         data['power_cost_2'].append(cost2['power_cost'])
-    #         data['used_hms_2'].append(cost2['used_hms'])
+            # 2层mbbo聚合时需要的集群状态信息(不容错)
+            cost2, elite_chrom2 = vm_mbbo.main(gen, 10, scale, p_relation, ['power'], rp, rm, v_p_cost, v_m_cost)
+            data['degree_of_concentration_2'].append(cost2['degree_of_concentration'])
+            data['power_cost_2'].append(cost2['power_cost'])
+            data['used_hms_2'].append(cost2['used_hms'])
 
-    #         # 3层mbbo聚合时需要的集群状态信息（不容错）
-    #         cost3, elite_chrom3  = doc_mbbo.main(gen, 10, scale, p_relation, ['power'], rp1, rm1, c_rp, c_rm)
-    #         data['degree_of_concentration_3'].append(cost3['degree_of_concentration'])
-    #         data['power_cost_3'].append(cost3['power_cost'])
-    #         data['used_hms_3'].append(cost3['used_hms'])
+            # 3层mbbo聚合时需要的集群状态信息（不容错）
+            cost3, elite_chrom3  = doc_mbbo.main(gen, 10, scale, p_relation, ['power'], rp1, rm1, c_rp, c_rm)
+            data['degree_of_concentration_3'].append(cost3['degree_of_concentration'])
+            data['power_cost_3'].append(cost3['power_cost'])
+            data['used_hms_3'].append(cost3['used_hms'])
             
-    #         with open('.//viz//unsafe-mbbo-consolidation-2&3-{}.json'.format(p_relation), 'a') as f:
-    #             f.flush()
-    #             json.dump(data, f, indent=2)
+            with open('.//viz//unsafe-mbbo-consolidation-2&3-{}.json'.format(p_relation), 'a') as f:
+                f.flush()
+                json.dump(data, f, indent=2)
         
-    #     # 程序循环计算结束并记录json文件后，将最终的字典data写入excel文件
-    #     # 创建excel工作表
-    #     workbook = xlwt.Workbook(encoding='utf-8')
-    #     worksheet = workbook.add_sheet('sheet1')  # cell_overwrite_ok=True
+        # 程序循环计算结束并记录json文件后，将最终的字典data写入excel文件
+        # 创建excel工作表
+        workbook = xlwt.Workbook(encoding='utf-8')
+        worksheet = workbook.add_sheet('sheet1')  # cell_overwrite_ok=True
 
-    #     # 设置表头
-    #     worksheet.write(0, 0, label='nums of Dockers')
-    #     worksheet.write(0, 1, label='fragment before consolidation')
-    #     worksheet.write(0, 2, label='power before consolidation')
-    #     worksheet.write(0, 3, label='nums of hms before consolidation')
-    #     worksheet.write(0, 4, label='fragment 2-tier consolidation')
-    #     worksheet.write(0, 5, label='power 2-tier consolidation')
-    #     worksheet.write(0, 6, label='nums of hms 2-tier consolidation')
-    #     worksheet.write(0, 7, label='fragment 3-tier consolidation')
-    #     worksheet.write(0, 8, label='power 3-tier consolidation')
-    #     worksheet.write(0, 9, label='nums of hms 3-tier consolidation')
-    #     val1, val2, val3, val4, val5, val6, val7, val8, val9, val10 = 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
-    #     # 将data字典写入excel中
-    #     for key, value in data.items():
-    #         print key,value
-    #         if key == "scale":
-    #             for s in value:
-    #                 worksheet.write(val1, 0, s)  # (row, col, data)
-    #                 print "已经写入第0列"
-    #                 val1 += 1
-    #         elif key == "degree_of_concentration_0":
-    #             for s in value:
-    #                 worksheet.write(val2, 1, s)
-    #                 print "已经写入第1列"
-    #                 val2 += 1
-    #         elif key == "power_cost_0":
-    #             for s in value:
-    #                 worksheet.write(val3, 2, s)
-    #                 print "已经写入第2列"
-    #                 val3 += 1
-    #         elif key == "used_hms_0":
-    #             for s in value:
-    #                 worksheet.write(val4, 3, s)
-    #                 print "已经写入第3列"
-    #                 val4 += 1
-    #         elif key == "degree_of_concentration_2":
-    #             for s in value:
-    #                 worksheet.write(val5, 4, s)
-    #                 print "已经写入第4列"
-    #                 val5 += 1
-    #         elif key == "power_cost_2":
-    #             for s in value:
-    #                 worksheet.write(val6, 5, s)
-    #                 print "已经写入第5列"
-    #                 val6 += 1
-    #         elif key == "used_hms_2":
-    #             for s in value:
-    #                 worksheet.write(val7, 6, s)
-    #                 print "已经写入第6列"
-    #                 val7 += 1
-    #         elif key == "degree_of_concentration_3":
-    #             for s in value:
-    #                 worksheet.write(val8, 7, s)
-    #                 print "已经写入第7列"
-    #                 val8 += 1
-    #         elif key == "power_cost_3":
-    #             for s in value:
-    #                 worksheet.write(val9, 8, s)
-    #                 print "已经写入第8列"
-    #                 val9 += 1
-    #         elif key == "used_hms_3":
-    #             for s in value:
-    #                 worksheet.write(val10, 9, s)
-    #                 print "已经写入第9列"
-    #                 val10 += 1
-    #     # 保存excel文件
-    #     workbook.save('.//viz//unsafe-mbbo-consolidation-2&3-{}.xls'.format(p_relation))
+        # 设置表头
+        worksheet.write(0, 0, label='nums of Dockers')
+        worksheet.write(0, 1, label='fragment before consolidation')
+        worksheet.write(0, 2, label='power before consolidation')
+        worksheet.write(0, 3, label='nums of hms before consolidation')
+        worksheet.write(0, 4, label='fragment 2-tier consolidation')
+        worksheet.write(0, 5, label='power 2-tier consolidation')
+        worksheet.write(0, 6, label='nums of hms 2-tier consolidation')
+        worksheet.write(0, 7, label='fragment 3-tier consolidation')
+        worksheet.write(0, 8, label='power 3-tier consolidation')
+        worksheet.write(0, 9, label='nums of hms 3-tier consolidation')
+        val1, val2, val3, val4, val5, val6, val7, val8, val9, val10 = 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
+        # 将data字典写入excel中
+        for key, value in data.items():
+            print key,value
+            if key == "scale":
+                for s in value:
+                    worksheet.write(val1, 0, s)  # (row, col, data)
+                    print "已经写入第0列"
+                    val1 += 1
+            elif key == "degree_of_concentration_0":
+                for s in value:
+                    worksheet.write(val2, 1, s)
+                    print "已经写入第1列"
+                    val2 += 1
+            elif key == "power_cost_0":
+                for s in value:
+                    worksheet.write(val3, 2, s)
+                    print "已经写入第2列"
+                    val3 += 1
+            elif key == "used_hms_0":
+                for s in value:
+                    worksheet.write(val4, 3, s)
+                    print "已经写入第3列"
+                    val4 += 1
+            elif key == "degree_of_concentration_2":
+                for s in value:
+                    worksheet.write(val5, 4, s)
+                    print "已经写入第4列"
+                    val5 += 1
+            elif key == "power_cost_2":
+                for s in value:
+                    worksheet.write(val6, 5, s)
+                    print "已经写入第5列"
+                    val6 += 1
+            elif key == "used_hms_2":
+                for s in value:
+                    worksheet.write(val7, 6, s)
+                    print "已经写入第6列"
+                    val7 += 1
+            elif key == "degree_of_concentration_3":
+                for s in value:
+                    worksheet.write(val8, 7, s)
+                    print "已经写入第7列"
+                    val8 += 1
+            elif key == "power_cost_3":
+                for s in value:
+                    worksheet.write(val9, 8, s)
+                    print "已经写入第8列"
+                    val9 += 1
+            elif key == "used_hms_3":
+                for s in value:
+                    worksheet.write(val10, 9, s)
+                    print "已经写入第9列"
+                    val10 += 1
+        # 保存excel文件
+        workbook.save('.//viz//unsafe-mbbo-consolidation-2&3-{}.xls'.format(p_relation))
 
 
     # ----------------- 对比实验三  非容错 3层 FFDSum与mbbo 聚合 ------------------------------ 
