@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 #-*- coding:utf-8 -*-
 '''
-Date : 2017-12-17
+该模块照搬自addtion_P分支unsafe_contrast模块
 @Author : Amy
 Goal : 分别以docker/VM，docker/HM作为资源利用率排序准则，对比同时使用FFDSum时的最终结果，并存于Result_Contrast.py
 Digest : 分别定义2种FFDSum算法：
@@ -22,11 +22,9 @@ from init import *
 
 
 # 其中vm_option以资源降序排列
-vm_option = [(1.0, 1.0), (1.0, 0.8), (0.8, 0.7), (0.6, 0.5), (0.5, 0.4), (0.3, 0.3)]
+# 对AWS的VM实例进行格式化并降序排列，cpu最大40, mem最大244
+vm_option = [(0.9, 1.0), (0.4, 0.5), (0.8, 1.0), (1.0, 0.6557377049180327), (0.4, 0.26229508196721313), (0.8, 0.2459016393442623), (0.4, 0.5), (0.2, 0.25), (0.1, 0.125), (0.1, 0.030737704918032786), (0.05, 0.030737704918032786), (0.025, 0.015368852459016393), (0.05, 0.03278688524590164), (0.05, 0.01639344262295082), (0.025, 0.00819672131147541), (0.025, 0.004098360655737705)]
 
-# rp_option = [0.5, 1.0]                      # vm可选的cpu尺寸
-# rm_option = [0.5, 1.0]                      # vm可选的mem尺寸
-               
 
 def FFDSum_complex(bins, objects):
     '''
@@ -855,95 +853,3 @@ if __name__ == '__main__':
     with open('.//viz//contrast-addtion-{}-demo.json'.format(datetime.datetime.now()),'w') as f:
         f.flush()
         json.dump(data, f, indent=2)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    # # 多进程初始化
-    # # p = multiprocessing.Pool()
-    # manager = multiprocessing.Manager()
-    # jobs = []
-
-    # # 重复次数
-    # Gen = 3
-       
-    # # 1. 用于生成json的数据
-    # data = {
-    #     'scale':[],
-    #     'simple':[],
-    #     'complex':[],
-    #     'safe_simple':[],
-    #     'safe_complex':[]
-    # }
-
-    # # 2. 产生新初始集群与新增容器的服务数量
-    # init_popu0 = main_init(50, 1.0)
-    # init_popu1 = copy.deepcopy(init_popu0)
-    # init_popu2 = copy.deepcopy(init_popu1)
-    # init_popu3 = copy.deepcopy(init_popu2)
-
-    # cycle = []
-    # for i in xrange(1, 3):
-    #     a = 10 ** i
-    #     ll = sorted(random.sample(range(1,10), 4))
-    #     for j in ll:
-    #         cycle.append(j*a)
-
-    # # 3. 模拟多批量新增场景
-    # for scale in cycle:
-    #     avg_scale = 0
-    #     avg_simple = [0, 0]
-    #     avg_complex = [0, 0]
-    #     avg_safe_simple = [0, 0]
-    #     avg_safe_complex = [0, 0]
-
-    #     # 运行10次，取效果最好者
-    #     for gen in xrange(Gen):
-    #         # 记录初始集群信息并深度拷贝多副本用于算法间对比
-    #         addtion0 = create_addtion(1.0, scale)
-    #         avg_scale += len(init_popu0['c_rp']) + sum(addtion0['replicas'])
-    #         cost0 = compute_costs(init_popu0)
-
-    #         # 对初始集群的多副本进行不同放置决策并计算优化模型结果
-    #         #[x.get() for x in [pool.apply_async(pool_test, (x,)) for x in gen_list(l)]]
-    #         return_dict = manager.dict()
-    #         p = multiprocessing.Process(target=main_controller, args=(0, init_popu0, addtion0, FFDSum_simple, return_dict))
-    #         jobs.append(p)
-    #         p.start()
-    #         p = multiprocessing.Process(target=main_controller, args=(1, init_popu1, addtion0, FFDSum_complex, return_dict))
-    #         jobs.append(p)
-    #         p.start()
-
-    #         # print p.map(main_controller, (init_popu0, init_popu1), (addtion0, addtion0), (FFDSum_simple, FFDSum_complex))
-
-    #         for proc in jobs:
-    #             proc.join()
-    #         # print return_dict.values()
-    #         avg_simple[0] += return_dict[0][0]
-    #         avg_simple[1] += return_dict[0][1]
-    #         avg_complex[0] += return_dict[1][0]
-    #         avg_complex[1] += return_dict[1][1]
-    #         avg_safe_simple = 0
-    #         avg_safe_complex = 0
-    #     # 计算迭代gen代的平均值,并写入文件
-    #     avg_scale /= Gen
-    #     avg_simple[0] /= Gen
-    #     avg_complex[0] /= Gen
-    #     avg_simple[1] /= Gen
-    #     avg_complex[1] /= Gen
-    #     data = createJSON(data, avg_scale, avg_simple, avg_complex, avg_safe_simple, avg_safe_complex)
-    # # # 4. 记录data用于前端数据可视化
-    # with open('.//viz//contrast-addtion-{}-demo.json'.format(datetime.datetime.now()),'w') as f:
-    #     f.flush()
-    #     json.dump(data, f, indent=2)

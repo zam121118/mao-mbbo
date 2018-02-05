@@ -2,15 +2,15 @@
 #-*- coding:utf-8 -*-
 '''
 Created on: 2017-4-12
-Change on: 2017-12-1
+Change on: 2018-2-3
 @author: Amy
-Goal: 这个mbbo算法是针对vm-hm架构的，单纯以VM为粒度的聚合算法
-      为了说明在d-v-h架构下，单纯考虑docker作为聚合单位 or vm单纯作为聚合单位
-      其聚合效果均不如同时以容器、vm作为聚合单位的效果好，因此实验设计:
-      1. 在d-v-h架构下，仅用FFDSum对docker层进行聚合 VS 使用FFDSum同时聚合docker层和VM层；
-      2. 在d-v-h下，仅用mbbo对vm层进行聚合 VS 使用mbbo同时对docker、vm层随机求解聚合；
-      3. 在d-v-h下，比对同时以docker、vm作为调度单位时的FFDSum、Mbbo、GA算法等的聚合效果；
-2017-12-1 新思考——对于负载均衡问题的理解：
+Goal: 该模块为针对vm-hm架构的仅以VM为粒度的聚合算法,通过随机生成vm-hm的映射候选解，希望将当前集群所有VMs调整至尽量少的激活态HMs上。
+Digest: 本模块构造的代表集群的状态数据结构中：
+        1. v_rp,v_rm 列表代表num_var个不同编号下标的VM demands资源大小，
+        对于running VMs均有大于0.0的资源请求，仅down Vms资源均为0.0;
+        2. 而population记录的是所有num_var的v-h或d-(v,h)映射，这并不说明所有的VM均都处于running态，
+        因此可以通过v_rp/rm均为0.0或者v_p/m_cost均为0.0来得知VM是否running,这会直接影响到代价计算的均值分母。
+2017-12-1 新思考——对于负载均衡问题的理解（该部分目前不打算写入论文中）：
       1. 数据中心长时间服务后，必然存在部分服务器承载少量VM，部分HM的cpu、mem几乎超过100%的负载不均情况，
          这种情况包括整个集群各个hm间cpu利用不均衡、mem利用不均衡、以及hm内部cpu、mem之间不均衡；
       2. 根据WoodT的多维资源归一化处理，引入load index，对于load index值越大那么该hm承载新的vm可能性越低，
@@ -18,16 +18,15 @@ Goal: 这个mbbo算法是针对vm-hm架构的，单纯以VM为粒度的聚合算
          引入集群的负载方差，方差越大说明hms之间负载差异性越高（能够承载新VM可能性差异大），负载越不均衡。
       3. 因此在对比算法性能代价时，应该综合考虑集群load index average和方差，方差越大说明集群负载更不均衡，
          但是若方差差异不大，那么load index average越小的集群承载更多VM的可能性越大。
-说明： 在构造的表示集群状态数据结构中，v_rp,v_rm list代表num_var个不同编号下标的VM demands资源大小，
-      对于running VMs均有大于0.0的资源请求，仅down Vms资源均为0.0;
-      而population记录的是所有num_var的v-h或d-(v,h)映射，这并不说明所有的VM均都处于running态，
-      因此可以通过v_rp/rm均为0.0或者v_p/m_cost均为0.0来得知VM是否running,
-      这会直接影响到代价计算的均值分母。
-
-2017-12-22 更新： vm_mbbo思想就是通过拿到集群所有active状态的HMs（最大可用hm下标代表了），
-                 获取各实际激活态vm尺寸，随机生成v-h的合理映射，通过代价函数引导求解方向。
-    !!! 在与加入docker聚合的聚合算法对比时，需要从集群中提炼出当前处于激活态的虚拟机的rp,rm以及这些虚拟机上实际由容器引起的负载v_p_cost、v_m_cost。
-    
+2017-12-28 与3层混合架构聚合对比：
+    <1> vm_mbbo聚合实验设置前提：
+      1. 仅设定vm_mbbo模块优化目标为集群碎片化资源与集群能耗;
+      2. 碎片化资源与能耗按照现有研究，以VM作为负载计算并优化每一次迭代进化方向；
+      3. 达到迭代中止条件后，再对该近似最优解计算以docker为实际负载产生的资源碎片化与集群能耗，作为与3层混合对比的结果。
+    <2> 与3层混合聚合对比实验设计：
+      1. 在d-v-h下，采用FFDSum的vm聚合    VS  采用FFDSum的docker&vm聚合；（非容错）
+      2. 在d-v-h下，采用mbbo的vm聚合      VS  采用mbbo的docker&vm聚合；（非容错）
+      3. 在d-v-h下，采用mbbo的非容错vm聚合 VS  采用mbbo的HM级容错docker&vm聚合；（支持容错的对比）
 '''
 import time
 import random
@@ -273,16 +272,10 @@ def mbbode_mutation(popu1):
         print "not effective in compute mbbode_mutation"
         sys.exit()
 
-def true_hm_cost(popu1, v_p_cost, v_m_cost):
-    '''
-    通过size个population与实际v_
-    '''
-
 def mbbode_cost(popu1):
     '''
-        2017-12-22 更新： 代价计算应以HM上所有实际docker作为负载，即所有v_p_cost之和
-        compute the costs of three objectives in MBBO/DE algorithm
-       更新： 由于集群中h_p/m_cost为0.0的代表down状态HMs，不应被算入各项指标中，故更新计算方式
+    迭代进化时，按照现有研究思想以vm作为集群负载进行代价计算；
+    代价计算时过滤掉集群中h_p/m_cost为0.0即状态为down的HMs
     '''
     # compute the power (down HMs的h_p/m_cost为0.0故不影响能耗计算）
     for i in xrange(popu1['size']):
@@ -359,7 +352,7 @@ def mbbode_rank(popu1, hsi_list):
     # update the value of rank of each chrom
     for i in range(popu1['size']):
         popu1['rank'][i] = 0
-    # 此处仅针对聚合优化目标进行
+    # 此处仅针对聚合场景能耗、集群碎片化资源优化目标进行
     for i in xrange(popu1['size']):
         for j in xrange(i+1, popu1['size']):
             if popu1['power_cost'][i] <= popu1['power_cost'][j]:
@@ -371,8 +364,7 @@ def mbbode_rank(popu1, hsi_list):
             elif popu1['concentration_cost'][i] > popu1['concentration_cost'][j]:
                 popu1['rank'][i] += 1
 
-
-    # 以下是针对所有优化目标的
+    # 以下是针对所有优化目标的（能耗、迁移时间、负载均衡）
     # for i in range(popu1['size']):
     #     for j in range(i+1, popu1['size']):                                                            # 按照非支配解排序non-dominated sorting
     #         if popu1['power_cost'][i] < popu1['power_cost'][j]:
@@ -431,10 +423,10 @@ def get_best_cost(popu1, popu2):
 def createVMResrcs(rp_u, rm_u, p, num_var):
     '''
     目标：Gao Y提出的基于相关系数生成测试数据集的方式来生成VM
-    参数：
-    rp_u是对cpu请求的指导变量，rm_u是对mem资源请求的指导变量，虚拟机对cpu，mem的最终需求量会以正态分布的形式落在以指导变量为期望的邻域附近
-    p代表虚拟机的cpu和mem两种资源之间的相关系数，负责控制每台虚拟机对两种资源需求的关联程度
-    num_var是需要生成的虚拟机个数
+    参数：rp_u、rm_u分别是对cpu、mem请求的指导变量，
+         虚拟机对cpu，mem的最终需求量会以正态分布的形式落在以指导变量为期望的邻域附近
+         p代表虚拟机的cpu和mem两种资源之间的相关系数，负责控制每台虚拟机对两种资源需求的关联程度
+         num_var是需要生成的虚拟机个数
     '''
     rp = range(num_var)                                                  # 记录每个虚拟机cpu,mem请求量
     rm = range(num_var)
@@ -486,9 +478,6 @@ def main(generation, size, num_var, p, hsi_list, rp, rm, v_p_cost, v_m_cost):
     lambdaa, mu = migrateRate(size)
     # random create num_var vms with cpu,mem requirements
     #rp, rm = createVMResrcs(rp_u, rm_u, p, num_var)
-    
-    # 为了与cmbbo做对比，这里采用cmbbo随机生成的方式进行赋值  
-
 
     # 与FFDSum使用d-v-h架构聚合时的各个vm尺寸
     # （尺寸为0.0表示在初始的集群结构中并没被使用，所以即使在mbbo中被安排population，却不会引起多余能耗，并且v_balance_cost与初始集群中一样）
@@ -525,12 +514,10 @@ def main(generation, size, num_var, p, hsi_list, rp, rm, v_p_cost, v_m_cost):
 
     # 设置最大迭代次数
     for g in range(generation):
-
         init_population = mbbode_migration(init_population)
         init_population = mbbode_mutation(init_population)
         init_population = mbbode_cost(init_population)
         init_population = mbbode_rank(init_population, hsi_list)
-
         flag = False
         for u in hsi_list:
             if elite_cost[u] > init_population['elite_'+u]:
@@ -549,8 +536,6 @@ def main(generation, size, num_var, p, hsi_list, rp, rm, v_p_cost, v_m_cost):
         if save_elite_cost['power'] != elite_cost['power'] or save_elite_cost['concentration'] != elite_cost['concentration'] or save_elite_cost['migration_time'] != elite_cost['migration_time']:    # 每一代全局最优解有变化时才会记录并打印
             print elite_cost
             save_elite_cost = copy.deepcopy(elite_cost)
-
-
     # 计算初始随机解、及最终保留下来的所有迭代次数中最优解，其各项真实代价
     before_cost = compute_true_cost(save_chrom, rp, rm, v_p_cost, v_m_cost)
     after_costs = compute_true_cost(init_population['elite_chrom'], rp, rm, v_p_cost, v_m_cost)
