@@ -106,7 +106,7 @@ def FFDSum_complex(bins, objects):
 
                 # 若所有active HMs均不满足，则新建HM并新建VM，（所建VM规格先不加以控制）
                 if not flag:
-                    # 创建最大VM
+                    # 随机创建可容纳该容器的VM
                     vm = create_VM(object_CPU, object_MEM,vm_option)
                     vm_suffix = len(bins['v_p_cost'][0])
                     hm_suffix = len(bins['h_m_cost'][0])
@@ -226,7 +226,7 @@ def FFDSum_simple(bins, objects):
     @param: bins 代表当前系统状态
             objects 代表待放入bin的容器
     @return: 安排好所有objects的集群bins状态
-    @note:  此算法仅进行VMs打分
+    @note:  此算法仅进行VMs打分,HM选择采用了FF算法
     '''
 
     # print " \n进入 FFDSum_simple() 方法" 
@@ -510,9 +510,9 @@ def new_weightHMBins_simple(bins, object_CPU, object_MEM):
             weightedHMBins.setdefault(j, cpuScore+memScore)
     return weightedHMBins
 
-def create_VM_abs_random(c_rp, c_rm, rp_option, rm_option):
+def dumped_create_VM_abs_random(c_rp, c_rm, rp_option, rm_option):
     '''
-    依据实验可选的VM尺寸(rp_option、rm_option)随机生成可以容纳(c_rp、c_rm)的VM
+    已废弃！依据实验可选的VM尺寸(rp_option、rm_option)随机生成可以容纳(c_rp、c_rm)的VM
     '''
     # print "\n 进入 create_VM() 方法"
 
@@ -659,9 +659,9 @@ def compute_costs(bins, size=1):
     # return cost
     return cost['used_hms'], cost['degree_of_concentration']
 
-def faked_cost(bins, size=1):
+def dumped_cost(bins, size=1):
     '''
-    注意： 这里负载以VM配置作为负载考虑
+    注意： 该模块已废弃！这里负载以VM配置作为负载考虑
     计算bins中前size个方案对应的能耗、负载均衡方差代价值
     以集群环境中所有running VMs/HMs作为计算对象
     '''
@@ -795,7 +795,7 @@ if __name__ == '__main__':
         cycle = []
         for i in xrange(1, 2):
             a = 10 ** i
-            ll = sorted(random.sample(range(1,10), 4))
+            ll = sorted(random.sample(range(1,10), 2))
             for j in ll:
                 cycle.append(j*a)
 

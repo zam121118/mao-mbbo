@@ -21,8 +21,8 @@ import multiprocessing
 from init import *
 
 
-# 其中vm_option以资源降序排列
-vm_option = [(1.0, 1.0), (1.0, 0.8), (0.8, 0.7), (0.6, 0.5), (0.5, 0.4), (0.3, 0.3)]
+# 对AWS的VM实例进行格式化并降序排列，cpu最大40, mem最大244
+vm_option = [(0.9, 1.0), (0.4, 0.5), (0.8, 1.0), (1.0, 0.6557377049180327), (0.4, 0.26229508196721313), (0.8, 0.2459016393442623), (0.4, 0.5), (0.2, 0.25), (0.1, 0.125), (0.1, 0.030737704918032786), (0.05, 0.030737704918032786), (0.025, 0.015368852459016393), (0.05, 0.03278688524590164), (0.05, 0.01639344262295082), (0.025, 0.00819672131147541), (0.025, 0.004098360655737705)]
 
 # rp_option = [0.5, 1.0]                      # vm可选的cpu尺寸
 # rm_option = [0.5, 1.0]                      # vm可选的mem尺寸
@@ -106,7 +106,7 @@ def FFDSum_complex(bins, objects):
 
                 # 若所有active HMs均不满足，则新建HM并新建VM，（所建VM规格先不加以控制）
                 if not flag:
-                    # 创建最大VM
+                    # 随机创建可容纳该容器的VM
                     vm = create_VM(object_CPU, object_MEM,vm_option)
                     vm_suffix = len(bins['v_p_cost'][0])
                     hm_suffix = len(bins['h_m_cost'][0])
@@ -226,7 +226,7 @@ def FFDSum_simple(bins, objects):
     @param: bins 代表当前系统状态
             objects 代表待放入bin的容器
     @return: 安排好所有objects的集群bins状态
-    @note:  此算法仅进行VMs打分
+    @note:  此算法仅进行VMs打分,HM选择采用了FF算法
     '''
 
     # print " \n进入 FFDSum_simple() 方法" 
@@ -510,9 +510,9 @@ def new_weightHMBins_simple(bins, object_CPU, object_MEM):
             weightedHMBins.setdefault(j, cpuScore+memScore)
     return weightedHMBins
 
-def create_VM_abs_random(c_rp, c_rm, rp_option, rm_option):
+def dumped_create_VM_abs_random(c_rp, c_rm, rp_option, rm_option):
     '''
-    依据实验可选的VM尺寸(rp_option、rm_option)随机生成可以容纳(c_rp、c_rm)的VM
+    该模块已废弃！依据实验可选的VM尺寸(rp_option、rm_option)随机生成可以容纳(c_rp、c_rm)的VM
     '''
     # print "\n 进入 create_VM() 方法"
 
@@ -659,9 +659,9 @@ def compute_costs(bins, size=1):
     # return cost
     return cost['used_hms'], cost['degree_of_concentration']
 
-def faked_cost(bins, size=1):
+def dumped_cost(bins, size=1):
     '''
-    注意： 这里负载以VM配置作为负载考虑
+    注意： 该模块已废弃！这里负载以VM配置作为负载考虑
     计算bins中前size个方案对应的能耗、负载均衡方差代价值
     以集群环境中所有running VMs/HMs作为计算对象
     '''
