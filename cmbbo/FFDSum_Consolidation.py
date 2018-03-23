@@ -902,7 +902,7 @@ if __name__ == '__main__':
     # ---------------- 对比实验一 非容错 3层与2层FFDsum聚合 -----------------------------
     # 用于d-v-h3层聚合与v-h2层聚合 FFDSum 聚合对比， 不考虑容错能力并且在代价中也不计算tolerance
     # 不同相干系数下的实验结果
-    for p_relation in [0.75, 0.02, -0.75]:
+    for p_relation in [0.00, 0.50, 1.00]:
         data = {
             'scale' : [],
             'degree_of_concentration_0':[],
