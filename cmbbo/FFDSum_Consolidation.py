@@ -1022,7 +1022,7 @@ if __name__ == '__main__':
     # 用于d-v-h3层聚合与v-h2层聚合对比，不考虑容错的  使用mbbo 方法聚合（已完成）
     gen = 30000
     num_crash = 20
-    for p_relation in [0.75, 0.02, -0.75]:
+    for p_relation in [0.00, 0.50, 1.00]:
         data = {
             'scale' : [],
             'degree_of_concentration_0':[],
