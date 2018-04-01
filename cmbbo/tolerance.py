@@ -97,7 +97,8 @@ def simulate_crash_HM(bins, num_crash, map_d_s, map_s_d, flag):
     # 计算方案容错能力
     tolerance = 10000 * N_severity + 2 * N_medium + 0.1 * N_mild
     print crash_services
-    return tolerance
+    # N_severity 中止的服务数量
+    return tolerance, N_severity
 
 def main_controller(function_str, bins, addtion0, func_handler, p_crash, max_suffix, max_service_suffix, map_d_s, return_dict):
     '''

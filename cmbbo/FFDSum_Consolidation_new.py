@@ -329,7 +329,8 @@ def safe_doc_mbbo(gen, size, scale, p, hsi_list, v_rp, v_rm, c_rp, c_rm, map_d_s
     used_hms = set(bins['map_v_h'].values())
     used_time = time.time() - time0
     print "支持HM级别容错的 3层 doc_mbbo 聚合used time is {} \n used the number of HMs is {}".format(used_time, len(used_hms))
-    return cost, bins
+    # cost是非容错的代价，对于新进行独立性修复后的集群应重新计算代价
+    return elite_chrom, cost, bins
 
 def detect_hm_independce(bins, map_d_s, map_s_d):
     '''
@@ -784,7 +785,8 @@ def consolidation_costs(bins, num_crash, map_d_s, map_s_d, flag):
         'degree_of_concentration': 0.0,
         'power_cost': 0.0,
         'used_hms': 0,
-        'tolerance': 0.0
+        'tolerance': 0.0,
+        'crashed_service': 0
         }
     size = 1
     map_h_v = map_h2v(bins)
@@ -815,7 +817,7 @@ def consolidation_costs(bins, num_crash, map_d_s, map_s_d, flag):
         pass
 
         # 模拟宕机计算容错
-        cost['tolerance'] = tolerance.simulate_crash_HM(bins, num_crash, map_d_s, map_s_d, flag)
+        cost['tolerance'], cost['crashed_service'] = tolerance.simulate_crash_HM(bins, num_crash, map_d_s, map_s_d, flag)
     return cost
 
 def consolidation_costs_nosafe(bins, num_crash, size=1):
@@ -894,386 +896,15 @@ def create_JSON(data, scale, degree_of_concentration, power_cost, tolerance, use
     data['tolerance_3'].append(tolerance)
     return data
 
-def min_hms(a,b):
-    if a >= b:
-        return b
-    elif a < b:
-        return a
+def min_hms(a,b,c):
+    ll = [a,b,c]
+    z = min(ll)
+    return z
 
 if __name__ == '__main__':
     '''
     本模块测试算法是否运行正确
     '''
-    # =====================  以下为非容错类实验对比  ============================================================
-    # ---------------- 对比实验一 非容错 3层与2层FFDsum聚合 -----------------------------
-    # 用于d-v-h3层聚合与v-h2层聚合 FFDSum 聚合对比， 不考虑容错能力并且在代价中也不计算tolerance
-    # 不同相干系数下的实验结果
-    # for p_relation in [0.75, 0.02, -0.75]:
-    #     data = {
-    #         'scale' : [],
-    #         'degree_of_concentration_0':[],
-    #         'power_cost_0': [],
-    #         'used_hms_0': [],
-    #         'degree_of_concentration_2':[],
-    #         'power_cost_2': [],
-    #         'used_hms_2': [],
-    #         'degree_of_concentration_3':[],
-    #         'power_cost_3': [],
-    #         'used_hms_3': []
-    #     }
-    #     cycle = [50, 100, 300, 700, 1000]
-    #     for scale in cycle:
-    #         init_popu0 = init.main_init(scale, p_relation)
-    #         init_popu1 = copy.deepcopy(init_popu0)
-    #         # 聚合前的各项代价
-    #         cost0 = consolidation_costs_nosafe(init_popu0, 0)
-    #         data['scale'].append(scale)
-    #         data['degree_of_concentration_0'].append(cost0['degree_of_concentration'])
-    #         data['power_cost_0'].append(cost0['power_cost'])
-    #         data['used_hms_0'].append(cost0['used_hms'])
-
-    #         # 3层聚合与代价计算(不考虑容错)
-    #         init_popu0  = FFDSum_3_Consol(init_popu0)
-    #         cost3 = consolidation_costs_nosafe(init_popu0, 0)
-    #         data['degree_of_concentration_3'].append(cost3['degree_of_concentration'])
-    #         data['power_cost_3'].append(cost3['power_cost'])
-    #         data['used_hms_3'].append(cost3['used_hms'])
-            
-    #         # 2层聚合与代价计算（不考虑容错）
-    #         init_popu1 = FFDSum_2_Consol(init_popu1)
-    #         cost2 = consolidation_costs_nosafe(init_popu1, 0)
-    #         data['degree_of_concentration_2'].append(cost2['degree_of_concentration'])
-    #         data['power_cost_2'].append(cost2['power_cost'])
-    #         data['used_hms_2'].append(cost2['used_hms'])
-            
-    #         with open('.//viz//unsafe-ffdsum-consolidation-2&3-{}.json'.format(p_relation), 'a') as f:
-    #             f.flush()
-    #             json.dump(data, f, indent=2)
-
-    #     # 程序循环计算结束并记录json文件后，将最终的字典data写入excel文件
-    #     # 创建excel工作表
-    #     workbook = xlwt.Workbook(encoding='utf-8')
-    #     worksheet = workbook.add_sheet('sheet1')  # cell_overwrite_ok=True
-
-    #     # 设置表头
-    #     worksheet.write(0, 0, label='nums of Dockers')
-    #     worksheet.write(0, 1, label='fragment before consolidation')
-    #     worksheet.write(0, 2, label='power before consolidation')
-    #     worksheet.write(0, 3, label='nums of hms before consolidation')
-    #     worksheet.write(0, 4, label='fragment 2-tier consolidation')
-    #     worksheet.write(0, 5, label='power 2-tier consolidation')
-    #     worksheet.write(0, 6, label='nums of hms 2-tier consolidation')
-    #     worksheet.write(0, 7, label='fragment 3-tier consolidation')
-    #     worksheet.write(0, 8, label='power 3-tier consolidation')
-    #     worksheet.write(0, 9, label='nums of hms 3-tier consolidation')
-    #     val1, val2, val3, val4, val5, val6, val7, val8, val9, val10 = 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
-    #     # 将data字典写入excel中
-    #     for key, value in data.items():
-    #         print key,value
-    #         if key == "scale":
-    #             for s in value:
-    #                 worksheet.write(val1, 0, s)  # (row, col, data)
-    #                 print "已经写入第0列"
-    #                 val1 += 1
-    #         elif key == "degree_of_concentration_0":
-    #             for s in value:
-    #                 worksheet.write(val2, 1, s)
-    #                 print "已经写入第1列"
-    #                 val2 += 1
-    #         elif key == "power_cost_0":
-    #             for s in value:
-    #                 worksheet.write(val3, 2, s)
-    #                 print "已经写入第2列"
-    #                 val3 += 1
-    #         elif key == "used_hms_0":
-    #             for s in value:
-    #                 worksheet.write(val4, 3, s)
-    #                 print "已经写入第3列"
-    #                 val4 += 1
-    #         elif key == "degree_of_concentration_2":
-    #             for s in value:
-    #                 worksheet.write(val5, 4, s)
-    #                 print "已经写入第4列"
-    #                 val5 += 1
-    #         elif key == "power_cost_2":
-    #             for s in value:
-    #                 worksheet.write(val6, 5, s)
-    #                 print "已经写入第5列"
-    #                 val6 += 1
-    #         elif key == "used_hms_2":
-    #             for s in value:
-    #                 worksheet.write(val7, 6, s)
-    #                 print "已经写入第6列"
-    #                 val7 += 1
-    #         elif key == "degree_of_concentration_3":
-    #             for s in value:
-    #                 worksheet.write(val8, 7, s)
-    #                 print "已经写入第7列"
-    #                 val8 += 1
-    #         elif key == "power_cost_3":
-    #             for s in value:
-    #                 worksheet.write(val9, 8, s)
-    #                 print "已经写入第8列"
-    #                 val9 += 1
-    #         elif key == "used_hms_3":
-    #             for s in value:
-    #                 worksheet.write(val10, 9, s)
-    #                 print "已经写入第9列"
-    #                 val10 += 1
-    #     # 保存excel文件
-    #     workbook.save('.//viz//unsafe-ffdsum-consolidation-2&3-{}.xls'.format(p_relation))
-
-
-    # ----------------- 对比实验二  非容错 3层与2层 mbbo聚合 ------------------------------ 
-    # 用于d-v-h3层聚合与v-h2层聚合对比，不考虑容错的  使用mbbo 方法聚合（已完成）
-    # gen = 30000
-    # num_crash = 20
-    # for p_relation in [0.00, 0.50, 1.00]:
-    #     data = {
-    #         'scale' : [],
-    #         'degree_of_concentration_0':[],
-    #         'power_cost_0': [],
-    #         'used_hms_0': [],
-    #         'degree_of_concentration_2':[],
-    #         'power_cost_2': [],
-    #         'used_hms_2': [],
-    #         'degree_of_concentration_3':[],
-    #         'power_cost_3': [],
-    #         'used_hms_3': []
-    #     }
-    #     cycle = [50, 100, 300, 700, 1000]
-    #     for scale in cycle:
-    #         # 初始准备
-    #         init_popu0 = init.main_init(scale, p_relation)
-    #         # init_popu1 = copy.deepcopy(init_popu0)
-    #         rp, rm, v_p_cost, v_m_cost = for_vm_mbbo(init_popu0)
-    #         c_rp, c_rm = init_popu0['c_rp'], init_popu0['c_rm']
-    #         rp1, rm1 = copy.deepcopy(rp), copy.deepcopy(rm)
-
-    #         # 聚合前的各项代价
-    #         cost0 = consolidation_costs_nosafe(init_popu0, 0)
-    #         data['scale'].append(scale)
-    #         data['degree_of_concentration_0'].append(cost0['degree_of_concentration'])
-    #         data['power_cost_0'].append(cost0['power_cost'])
-    #         data['used_hms_0'].append(cost0['used_hms'])
-
-    #         # 2层mbbo聚合时需要的集群状态信息(不容错)
-    #         cost2, elite_chrom2 = vm_mbbo.main(gen, 10, scale, p_relation, ['power'], rp, rm, v_p_cost, v_m_cost)
-    #         data['degree_of_concentration_2'].append(cost2['degree_of_concentration'])
-    #         data['power_cost_2'].append(cost2['power_cost'])
-    #         data['used_hms_2'].append(cost2['used_hms'])
-
-    #         # 3层mbbo聚合时需要的集群状态信息（不容错）
-    #         cost3, elite_chrom3  = doc_mbbo.main(gen, 10, scale, p_relation, ['power'], rp1, rm1, c_rp, c_rm)
-    #         data['degree_of_concentration_3'].append(cost3['degree_of_concentration'])
-    #         data['power_cost_3'].append(cost3['power_cost'])
-    #         data['used_hms_3'].append(cost3['used_hms'])
-            
-    #         with open('.//viz//unsafe-mbbo-consolidation-2&3-{}.json'.format(p_relation), 'a') as f:
-    #             f.flush()
-    #             json.dump(data, f, indent=2)
-        
-    #     # 程序循环计算结束并记录json文件后，将最终的字典data写入excel文件
-    #     # 创建excel工作表
-    #     workbook = xlwt.Workbook(encoding='utf-8')
-    #     worksheet = workbook.add_sheet('sheet1')  # cell_overwrite_ok=True
-
-    #     # 设置表头
-    #     worksheet.write(0, 0, label='nums of Dockers')
-    #     worksheet.write(0, 1, label='fragment before consolidation')
-    #     worksheet.write(0, 2, label='power before consolidation')
-    #     worksheet.write(0, 3, label='nums of hms before consolidation')
-    #     worksheet.write(0, 4, label='fragment 2-tier consolidation')
-    #     worksheet.write(0, 5, label='power 2-tier consolidation')
-    #     worksheet.write(0, 6, label='nums of hms 2-tier consolidation')
-    #     worksheet.write(0, 7, label='fragment 3-tier consolidation')
-    #     worksheet.write(0, 8, label='power 3-tier consolidation')
-    #     worksheet.write(0, 9, label='nums of hms 3-tier consolidation')
-    #     val1, val2, val3, val4, val5, val6, val7, val8, val9, val10 = 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
-    #     # 将data字典写入excel中
-    #     for key, value in data.items():
-    #         print key,value
-    #         if key == "scale":
-    #             for s in value:
-    #                 worksheet.write(val1, 0, s)  # (row, col, data)
-    #                 print "已经写入第0列"
-    #                 val1 += 1
-    #         elif key == "degree_of_concentration_0":
-    #             for s in value:
-    #                 worksheet.write(val2, 1, s)
-    #                 print "已经写入第1列"
-    #                 val2 += 1
-    #         elif key == "power_cost_0":
-    #             for s in value:
-    #                 worksheet.write(val3, 2, s)
-    #                 print "已经写入第2列"
-    #                 val3 += 1
-    #         elif key == "used_hms_0":
-    #             for s in value:
-    #                 worksheet.write(val4, 3, s)
-    #                 print "已经写入第3列"
-    #                 val4 += 1
-    #         elif key == "degree_of_concentration_2":
-    #             for s in value:
-    #                 worksheet.write(val5, 4, s)
-    #                 print "已经写入第4列"
-    #                 val5 += 1
-    #         elif key == "power_cost_2":
-    #             for s in value:
-    #                 worksheet.write(val6, 5, s)
-    #                 print "已经写入第5列"
-    #                 val6 += 1
-    #         elif key == "used_hms_2":
-    #             for s in value:
-    #                 worksheet.write(val7, 6, s)
-    #                 print "已经写入第6列"
-    #                 val7 += 1
-    #         elif key == "degree_of_concentration_3":
-    #             for s in value:
-    #                 worksheet.write(val8, 7, s)
-    #                 print "已经写入第7列"
-    #                 val8 += 1
-    #         elif key == "power_cost_3":
-    #             for s in value:
-    #                 worksheet.write(val9, 8, s)
-    #                 print "已经写入第8列"
-    #                 val9 += 1
-    #         elif key == "used_hms_3":
-    #             for s in value:
-    #                 worksheet.write(val10, 9, s)
-    #                 print "已经写入第9列"
-    #                 val10 += 1
-    #     # 保存excel文件
-    #     workbook.save('.//viz//unsafe-mbbo-consolidation-2&3-{}.xls'.format(p_relation))
-
-
-    # ----------------- 对比实验三  非容错 3层 FFDSum与mbbo 聚合 ------------------------------ 
-    # # 用于d-v-h3层架构下,FFDSum与mbbo聚合结果对比（不支持容错）
-    # gen = 30000
-    # num_crash = 20
-    # for p_relation in [0.75, 0.02, -0.75]:
-    #     data = {
-    #         'scale' : [],
-    #         'degree_of_concentration_0':[],
-    #         'power_cost_0': [],
-    #         'used_hms_0': [],
-    #         'degree_of_concentration_ffd':[],
-    #         'power_cost_ffd': [],
-    #         'used_hms_ffd': [],
-    #         'degree_of_concentration_mbbo':[],
-    #         'power_cost_mbbo': [],
-    #         'used_hms_mbbo': []
-    #     }
-    #     cycle = [50, 100, 300, 700, 1000]
-    #     for scale in cycle:
-    #         # 初始准备
-    #         init_popu0 = init.main_init(scale, p_relation)
-    #         rp, rm, v_p_cost, v_m_cost = for_vm_mbbo(init_popu0)
-    #         c_rp, c_rm = init_popu0['c_rp'], init_popu0['c_rm']
-    #         rp1, rm1 = copy.deepcopy(rp), copy.deepcopy(rm)
-
-    #         # 聚合前的各项代价
-    #         cost0 = consolidation_costs_nosafe(init_popu0, 0)
-    #         data['scale'].append(scale)
-    #         data['degree_of_concentration_0'].append(cost0['degree_of_concentration'])
-    #         data['power_cost_0'].append(cost0['power_cost'])
-    #         data['used_hms_0'].append(cost0['used_hms'])
-
-
-    #         # FFDSum聚合方法(不容错)
-    #         init_popu0  = FFDSum_3_Consol(init_popu0)
-    #         cost2 = consolidation_costs_nosafe(init_popu0, 0)
-    #         data['degree_of_concentration_ffd'].append(cost2['degree_of_concentration'])
-    #         data['power_cost_ffd'].append(cost2['power_cost'])
-    #         data['used_hms_ffd'].append(cost2['used_hms'])
-
-    #         # MBBO聚合方法（不容错）
-    #         cost3, elite_chrom3  = doc_mbbo.main(gen, 10, scale, p_relation, ['power'], rp1, rm1, c_rp, c_rm)
-    #         data['degree_of_concentration_mbbo'].append(cost3['degree_of_concentration'])
-    #         data['power_cost_mbbo'].append(cost3['power_cost'])
-    #         data['used_hms_mbbo'].append(cost3['used_hms'])
-
-    #         with open('.//viz//unsafe-3-ffdsum-mbbo-consolidation-{}.json'.format(p_relation), 'a') as f:
-    #             f.flush()
-    #             json.dump(data, f, indent=2)
-
-    #     # 程序循环计算结束并记录json文件后，将最终的字典data写入excel文件
-    #     # 创建excel工作表
-    #     workbook = xlwt.Workbook(encoding='utf-8')
-    #     worksheet = workbook.add_sheet('sheet1')  # cell_overwrite_ok=True
-
-    #     # 设置表头
-    #     worksheet.write(0, 0, label='nums of Dockers')
-    #     worksheet.write(0, 1, label='fragment before consolidation')
-    #     worksheet.write(0, 2, label='power before consolidation')
-    #     worksheet.write(0, 3, label='nums of hms before consolidation')
-    #     worksheet.write(0, 4, label='fragment ffd consolidation')
-    #     worksheet.write(0, 5, label='power ffd consolidation')
-    #     worksheet.write(0, 6, label='nums of hms ffd consolidation')
-    #     worksheet.write(0, 7, label='fragment mbbo consolidation')
-    #     worksheet.write(0, 8, label='power mbbo consolidation')
-    #     worksheet.write(0, 9, label='nums of hms mbbo consolidation')
-
-    #     val1, val2, val3, val4, val5, val6, val7, val8, val9, val10 = 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
-    #     # 将data字典写入excel中
-    #     for key, value in data.items():
-    #         print key,value
-    #         if key == "scale":
-    #             for s in value:
-    #                 worksheet.write(val1, 0, s)  # (row, col, data)
-    #                 print "已经写入第0列"
-    #                 val1 += 1
-    #         elif key == "degree_of_concentration_0":
-    #             for s in value:
-    #                 worksheet.write(val2, 1, s)
-    #                 print "已经写入第1列"
-    #                 val2 += 1
-    #         elif key == "power_cost_0":
-    #             for s in value:
-    #                 worksheet.write(val3, 2, s)
-    #                 print "已经写入第2列"
-    #                 val3 += 1
-    #         elif key == "used_hms_0":
-    #             for s in value:
-    #                 worksheet.write(val4, 3, s)
-    #                 print "已经写入第3列"
-    #                 val4 += 1
-    #         elif key == "degree_of_concentration_ffd":
-    #             for s in value:
-    #                 worksheet.write(val5, 4, s)
-    #                 print "已经写入第4列"
-    #                 val5 += 1
-    #         elif key == "power_cost_ffd":
-    #             for s in value:
-    #                 worksheet.write(val6, 5, s)
-    #                 print "已经写入第5列"
-    #                 val6 += 1
-    #         elif key == "used_hms_ffd":
-    #             for s in value:
-    #                 worksheet.write(val7, 6, s)
-    #                 print "已经写入第6列"
-    #                 val7 += 1
-    #         elif key == "degree_of_concentration_mbbo":
-    #             for s in value:
-    #                 worksheet.write(val8, 7, s)
-    #                 print "已经写入第7列"
-    #                 val8 += 1
-    #         elif key == "power_cost_mbbo":
-    #             for s in value:
-    #                 worksheet.write(val9, 8, s)
-    #                 print "已经写入第8列"
-    #                 val9 += 1
-    #         elif key == "used_hms_mbbo":
-    #             for s in value:
-    #                 worksheet.write(val10, 9, s)
-    #                 print "已经写入第9列"
-    #                 val10 += 1
-    #     # 保存excel文件
-    #     workbook.save('.//viz//unsafe-3-ffdsum-mbbo-consolidation-{}.xls'.format(p_relation))
-
-
-
-
     # ================================== 以下为支持容错类实验对比 ========================================================
 
     # 对比实验四  3层HM级容错FFDSum 与 2层非容错 FFDSum对比  （已完成）
@@ -1331,32 +962,51 @@ if __name__ == '__main__':
 
 
     # 在这里将支持容错的实验进行自动化，
-    # 3层架构下mbbo与FFDSum的聚合对比（支持容错）
+    # 3层架构下所有聚合算法对比，mbbo与FFDSum的聚合对比（支持容错）
     gen = 30000
-    # num_crash = 20
     #for p_relation in [0.00, 0.50, 0.75, 1.00]:
 
     data = {
         'scale' : [],
-        'degree_of_concentration_0':[],
+        'crashed_hms': [],
+        'degree_of_concentration_0':[],   # 聚合前各类数据
         'power_cost_0': [],
         'used_hms_0': [],
         'tolerance_0': [],
-        'degree_of_concentration_ffd':[],
-        'power_cost_ffd': [],
-        'used_hms_ffd': [],
-        'tolerance_ffd': [],
-        'degree_of_concentration_mbbo':[],
-        'power_cost_mbbo': [],
-        'used_hms_mbbo': [],
-        'tolerance_mbbo': []
+        'crashed_service_0': [],         # crashed_hms造成的宕机服务数量
+        'degree_of_concentration_3ffd_safe':[],   # 3层容错FFDSum聚合后各类数据
+        'power_cost_3ffd_safe': [],
+        'used_hms_3ffd_safe': [],
+        'tolerance_3ffd_safe': [],
+        'crashed_service_3ffd_safe': [],
+        'degree_of_concentration_2ffd_unsafe':[],  # 2层非容错FFDSum聚合后各类数据
+        'power_cost_2ffd_unsafe': [],
+        'used_hms_2ffd_unsafe': [],
+        'tolerance_2ffd_unsafe': [],
+        'crashed_service_2ffd_unsafe': [],
+        'degree_of_concentration_3mbbo_safe':[],   # 3层容错mbbo聚合后各类数据
+        'power_cost_3mbbo_safe': [],
+        'used_hms_3mbbo_safe': [],
+        'tolerance_3mbbo_safe': [],
+        'crashed_service_3mbbo_safe': [],
+        'degree_of_concentration_3mbbo_unsafe':[],  # 3层非容错mbbo聚合后各类数据
+        'power_cost_3mbbo_unsafe': [],
+        'used_hms_3mbbo_unsafe': [],
+        'tolerance_3mbbo_unsafe': [],
+        'crashed_service_3mbbo_unsafe': [],
+        'degree_of_concentration_2mbbo_unsafe':[],  # 2层非容错mbbo聚合后各类数据
+        'power_cost_2mbbo_unsafe': [],
+        'used_hms_2mbbo_unsafe': [],
+        'tolerance_2mbbo_unsafe': [],
+        'crashed_service_2mbbo_unsafe': []
+
     }
-    cycle = [100]
+    cycle = [50, 100, 300, 700]
+    # cycle = [50]
     for scale in cycle:
-        # num_crash = int(scale/2 * 0.85)
         # 初始准备
         init_popu0 = init.main_init(scale, 1.0)
-        init_popu1 = copy.deepcopy(init_popu0)
+        init_popu1, init_popu2 = copy.deepcopy(init_popu0), copy.deepcopy(init_popu0)
         map_d_s, map_s_d = docker2service(scale)
         # 此处需要统计各编号服务及其副本数量
         rp, rm, v_p_cost, v_m_cost = for_vm_mbbo(init_popu0)
@@ -1364,106 +1014,76 @@ if __name__ == '__main__':
         rp1, rm1 = copy.deepcopy(rp), copy.deepcopy(rm)
 
 
-        # FFDSum聚合方法(支持容错)
+        # 3层容错FFDSum聚合方法
         init_popu1  = safe_FFDSum_3_Consol(init_popu1, map_d_s, map_s_d)
         hms1 = len(set(init_popu1['map_v_h'].values()))
         print "ffdsum = {}".format(hms1)
-        # cost2 = consolidation_costs(init_popu1, num_crash, map_d_s, map_s_d, 0)
-        # data['degree_of_concentration_ffd'].append(cost2['degree_of_concentration'])
-        # data['power_cost_ffd'].append(cost2['power_cost'])
-        # data['used_hms_ffd'].append(cost2['used_hms'])
-        # data['tolerance_ffd'].append(cost2['tolerance'])
 
-        # MBBO聚合方法（支持容错）
-        cost3, bins = safe_doc_mbbo(gen, 5, scale, 1.0, ['power'], rp1, rm1, c_rp, c_rm, map_d_s, map_s_d)
-        data['degree_of_concentration_mbbo'].append(cost3['degree_of_concentration'])
-        data['power_cost_mbbo'].append(cost3['power_cost'])
-        data['used_hms_mbbo'].append(cost3['used_hms'])
-        hms2 = len(set(bins['map_v_h'].values()))
-        print "mbbo = {}".format(hms2)
-        # tolerance_3 = tolerance.simulate_crash_HM(bins, num_crash, map_d_s, map_s_d, 0)
-        # data['tolerance_mbbo'].append(tolerance_3)
+        # 2层非容错FFDSum聚合方法
+        init_popu2 = FFDSum_2_Consol(init_popu2)
+        hms2 = len(set(init_popu2['map_v_h'].values()))
+
+
+        # 3层容错MBBO聚合方法，elite_chrom与cost3 为3层非容错的聚合集群状态与代价
+        elite_chrom3, cost3, bins = safe_doc_mbbo(gen, 5, scale, 1.0, ['power'], rp1, rm1, c_rp, c_rm, map_d_s, map_s_d)
+        hms3 = len(set(bins['map_v_h'].values()))
+
+        # 3层非容错mbbo聚合
+        # cost4, elite_chrom4  = doc_mbbo.main(gen, 5, scale, 1.0, ['power'], rp1, rm1, c_rp, c_rm)
+        # hms4 = len(set(elite_chrom4['map_v_h'].values()))
+        # data['degree_of_concentration_mbbo'].append(cost3['degree_of_concentration'])
+        # data['power_cost_mbbo'].append(cost3['power_cost'])
+        # data['used_hms_mbbo'].append(cost3['used_hms'])
+
+
+        # 2层非容错mbbo聚合及其代价计算
+        # cost5, elite_chrom5 = vm_mbbo.main(gen, 5, scale, 1.0, ['power'], rp, rm, v_p_cost, v_m_cost)
+        # hms5 = len(set(elite_chrom5['map_v_h'].values()))
+        # data['degree_of_concentration_2'].append(cost2['degree_of_concentration'])
+        # data['power_cost_2'].append(cost2['power_cost'])
+        # data['used_hms_2'].append(cost2['used_hms'])
 
         # 宕机数量选择两种聚合算法结束后所用服务器数量最小的值
-        num_crash = int(min_hms(hms1, hms2) * 0.5)
+        num_crash = int(min_hms(hms1, hms2, hms3) * 0.5)
         print "num_crash = {}".format(num_crash)
 
-        # 接着完成FFDSum容错聚合代价计算与代价记录data
-        cost2 = consolidation_costs(init_popu1, num_crash, map_d_s, map_s_d, 0)
-        data['degree_of_concentration_ffd'].append(cost2['degree_of_concentration'])
-        data['power_cost_ffd'].append(cost2['power_cost'])
-        data['used_hms_ffd'].append(cost2['used_hms'])
-        data['tolerance_ffd'].append(cost2['tolerance'])
-        # 接着完成MBBO容错聚合容错力计算并记录结果到data
-        tolerance_3 = tolerance.simulate_crash_HM(bins, num_crash, map_d_s, map_s_d, 0)
-        data['tolerance_mbbo'].append(tolerance_3)
+#=================接下来进行各算法的容错能力模拟并记录所有代价值==================================
+
+        # 接着完成3层容错FFDSum聚合代价计算与记录data
+        cost1 = consolidation_costs(init_popu1, num_crash, map_d_s, map_s_d, 0)
+        data['degree_of_concentration_3ffd_safe'].append(cost1['degree_of_concentration'])
+        data['power_cost_3ffd_safe'].append(cost1['power_cost'])
+        data['used_hms_3ffd_safe'].append(cost1['used_hms'])
+        data['tolerance_3ffd_safe'].append(cost1['tolerance'])
+        data['crashed_service_3ffd_safe'].append(cost1['crashed_service'])
+
+
+        # 接着完成2层非容错FFDSum聚合代价计算与记录data
+        cost2 = consolidation_costs(init_popu2, num_crash, map_d_s, map_s_d, -1)
+        data['degree_of_concentration_2ffd_unsafe'].append(cost2['degree_of_concentration'])
+        data['power_cost_2ffd_unsafe'].append(cost2['power_cost'])
+        data['used_hms_2ffd_unsafe'].append(cost2['used_hms'])
+        data['tolerance_2ffd_unsafe'].append(cost2['tolerance'])
+        data['crashed_service_2ffd_unsafe'].append(cost2['crashed_service'])
+
+        # 接着完成3层容错MBBO聚合代价计算并记录data
+        cost3 = consolidation_costs(bins, num_crash, map_d_s, map_s_d, 0)
+        data['degree_of_concentration_3mbbo_safe'].append(cost3['degree_of_concentration'])
+        data['power_cost_3mbbo_safe'].append(cost3['power_cost'])
+        data['used_hms_3mbbo_safe'].append(cost3['used_hms'])
+        data['tolerance_3mbbo_safe'].append(cost3['tolerance'])
+        data['crashed_service_3mbbo_safe'].append(cost3['crashed_service'])
 
         # 聚合前的各项代价
         cost0 = consolidation_costs(init_popu0, num_crash, map_d_s, map_s_d, 1)
         data['scale'].append(scale)
+        data['crashed_hms'].append(num_crash)
         data['degree_of_concentration_0'].append(cost0['degree_of_concentration'])
         data['power_cost_0'].append(cost0['power_cost'])
         data['used_hms_0'].append(cost0['used_hms'])
         data['tolerance_0'].append(cost0['tolerance'])
+        data['crashed_service_0'].append(cost0['crashed_service'])
 
-        with open('.//viz//consolidation-mbbo-ffd-safe-31.json','w') as f:
+        with open('.//viz//safe-consolidation-contrast-0401.json','a') as f:
             f.flush()
             json.dump(data, f, indent=2)
-
-
-
-
-
-
-
-
-
-
-
-
-    # ---------------------用于论文中代码提交------------------------
-    # # 由addtion_phase/init 模块main_init方法生成初始
-    # init_popu = init.main_init(100, 1.0)
-    # p_crash = 0.1
-    # print "集群初始化完毕"
-    # scale = len(init_popu['c_rp'])
-    # cycle = [100, 300, 500, 700]#, 900, 1300, 1500, 1700, 1900, 2100, 2300]
-    # count = 0  # 每增量放置3批，进行一次聚合
-    # data = {
-    #     'scale' : [],
-    #     'degree_of_concentration':[],
-    #     'tolerance': [],
-    #     'power_cost': [],
-    #     'used_hms': []
-    # }
-    # # 记录初始代价
-    # cost0 = consolidation_costs(init_popu, p_crash)
-    # data = create_JSON(data, scale, cost0['degree_of_concentration'], cost0['power_cost'], cost0['tolerance'], cost0['used_hms'])
-    # print data
-    # for scale in cycle:
-    #     print "正在进行{}批量的增加".format(scale)
-    #     count += 1
-    #     # 生成增量
-    #     addtion0 = init.create_addtion(1.0, scale)
-
-    #     # 首先进行增量批放置
-    #     print "将进行初始放置"
-    #     init_popu = Contrast.FFDSum_simple(init_popu, addtion0)
-    #     scale += sum(addtion0['replicas'])
-    #     cost1 = consolidation_costs(init_popu, p_crash)
-    #     data = create_JSON(data, scale, cost1['degree_of_concentration'], cost1['power_cost'], cost1['tolerance'], cost1['used_hms'])
-        
-    #     # 增量放置3次进行聚合
-    #     if count == 3:
-    #         count = 0  
-    #         print "将进行聚合放置"
-    #         s0 = 'bins={}'.format(init_popu)
-    #         with open('aaa.py', 'a') as f:
-    #             f.write(s0)
-    #         init_popu = FFDSum_Consol(init_popu)
-    #         cost2 = consolidation_costs(init_popu, p_crash)
-    #         data = create_JSON(data, scale, cost2['degree_of_concentration'], cost2['power_cost'], cost2['tolerance'], cost2['used_hms'])
-    # with open('.//viz//consolidation-no-safe-{}-demo.json'.format(datetime.datetime.now()),'w') as f:
-    #     f.flush()
-    #     json.dump(data, f, indent=2)
-
