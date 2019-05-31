@@ -95,3 +95,8 @@ Generations | Computing Time| begin-end used pms | 3 begining HSIs| 3 ending HSI
 The visualization powered by pixi.js:
 
 ![pixi.js version](https://github.com/zam121118/mao-mbbo/blob/master/viz/static/img/demo.png?raw=true)
+
+
+## 简单启动
+
+使用 `python -m SimpleHTTPServer 8080` 即可启动一个简单的web服务器，让前端展示出来。
